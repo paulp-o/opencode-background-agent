@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@paulp-o/opencode-background-agent)](https://www.npmjs.com/package/@paulp-o/opencode-background-agent)
 [![license](https://img.shields.io/npm/l/@paulp-o/opencode-background-agent)](https://github.com/paulp-o/opencode-background-task/blob/main/LICENSE)
 
-An unopionated, **Non-Blocking(optional), Async** Background agent plugin for OpenCode, **same as (or better than) that of Claude Code!**
+An unopinionated, **Non-Blocking(optional), Async** Background agent plugin for OpenCode, **same as (or better than) that of Claude Code!**
 
 ## Configuration
 
