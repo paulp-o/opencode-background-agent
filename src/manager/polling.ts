@@ -1,0 +1,217 @@
+import { COMPLETION_DISPLAY_DURATION } from "../constants";
+import type { BackgroundTask, OpencodeClient } from "../types";
+
+/**
+ * Start polling for task status updates.
+ *
+ * Sets up an interval that polls every 100ms to check task progress.
+ */
+export function startPolling(
+  pollingInterval: Timer | undefined,
+  pollFn: () => void
+): Timer | undefined {
+  if (pollingInterval) return pollingInterval;
+
+  return setInterval(() => {
+    pollFn();
+  }, 100);
+}
+
+/**
+ * Stop polling for task status updates.
+ *
+ * Clears the polling interval.
+ */
+export function stopPolling(pollingInterval: Timer | undefined): void {
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+  }
+}
+
+/**
+ * Poll running tasks to check their status and progress.
+ *
+ * This is the main polling function that:
+ * - Checks if parent session still exists
+ * - Updates task status when sessions become idle
+ * - Updates task progress (tool calls, etc.)
+ * - Cleans up old completed tasks
+ * - Stops polling when no active tasks remain
+ */
+export async function pollRunningTasks(
+  client: OpencodeClient,
+  tasks: Map<string, BackgroundTask>,
+  originalParentSessionID: string | null,
+  updateTaskProgress: (task: BackgroundTask) => Promise<void>,
+  notifyParentSession: (task: BackgroundTask) => void,
+  clearAllTasks: () => void,
+  stopPolling: () => void,
+  showProgressToast: (allTasks: BackgroundTask[]) => void,
+  getTasksArray: () => BackgroundTask[]
+): Promise<void> {
+  try {
+    const statusResult = await client.session.status();
+    const allStatuses = (statusResult.data ?? {}) as Record<string, { type: string }>;
+
+    const now = Date.now();
+
+    // Check if any parent session no longer exists - if so, clear all tasks
+    // Only check after tasks have been running for at least 3 seconds (grace period)
+    const runningTasks = getTasksArray().filter((t) => t.status === "running");
+    const oldestRunningTask = runningTasks.reduce((oldest, t) => {
+      const startTime = new Date(t.startedAt).getTime();
+      return startTime < oldest ? startTime : oldest;
+    }, Date.now());
+    const taskAge = now - oldestRunningTask;
+
+    if (taskAge > 3000 && originalParentSessionID) {
+      try {
+        // Check if parent session still exists
+        const parentSession = await client.session.get({
+          path: { id: originalParentSessionID },
+        });
+        if (parentSession.error || !parentSession.data) {
+          clearAllTasks();
+          return;
+        }
+      } catch {
+        // Error checking sessions - parent might be deleted
+        clearAllTasks();
+        return;
+      }
+    }
+
+    for (const task of tasks.values()) {
+      if (task.status !== "running") continue;
+
+      const sessionStatus = allStatuses[task.sessionID];
+
+      if (!sessionStatus) {
+        await updateTaskProgress(task);
+        continue;
+      }
+
+      if (sessionStatus.type === "idle") {
+        task.status = "completed";
+        task.completedAt = new Date().toISOString();
+        notifyParentSession(task);
+        continue;
+      }
+
+      await updateTaskProgress(task);
+    }
+
+    // Check if any running tasks remain
+    const hasRunningTasks = getTasksArray().some((t) => t.status === "running");
+
+    // Clean up old completed tasks when no running tasks (only after result retrieved)
+    if (!hasRunningTasks) {
+      for (const [taskId, task] of tasks) {
+        if (task.status !== "running" && task.completedAt) {
+          if (
+            task.resultRetrievedAt &&
+            now - new Date(task.resultRetrievedAt).getTime() > COMPLETION_DISPLAY_DURATION
+          ) {
+            tasks.delete(taskId);
+          }
+        }
+      }
+    }
+
+    // Check if we should continue polling
+    const hasActiveOrRecentTasks = getTasksArray().some((t) => {
+      if (t.status === "running") return true;
+      if (t.completedAt) {
+        const completedTime = new Date(t.completedAt).getTime();
+        return now - completedTime <= COMPLETION_DISPLAY_DURATION;
+      }
+      return false;
+    });
+
+    if (!hasActiveOrRecentTasks) {
+      stopPolling();
+      return;
+    }
+
+    showProgressToast(getTasksArray());
+  } catch {
+    // Ignore polling errors
+  }
+}
+
+/**
+ * Update task progress information.
+ *
+ * Fetches messages from the task's session and updates:
+ * - Tool call count
+ * - Last 3 tools used
+ * - Last update timestamp
+ */
+export async function updateTaskProgress(
+  task: BackgroundTask,
+  client: OpencodeClient
+): Promise<void> {
+  try {
+    const messagesResult = await client.session.messages({
+      path: { id: task.sessionID },
+    });
+
+    if (messagesResult.error || !messagesResult.data) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages = messagesResult.data as any[];
+
+    let toolCalls = 0;
+    const allTools: string[] = [];
+
+    for (const msg of messages) {
+      const parts = msg.parts ?? msg.content ?? [];
+      const role = msg.info?.role ?? msg.role;
+
+      if (role !== "assistant") continue;
+
+      for (const part of parts) {
+        if (part.type === "tool" && part.tool) {
+          toolCalls++;
+          allTools.push(part.tool);
+        }
+      }
+    }
+
+    if (!task.progress) {
+      task.progress = {
+        toolCalls: 0,
+        lastTools: [],
+        lastUpdate: new Date().toISOString(),
+      };
+    }
+    task.progress.toolCalls = toolCalls;
+    task.progress.lastTools = allTools.slice(-3);
+    task.progress.lastUpdate = new Date().toISOString();
+  } catch {
+    // Ignore progress update errors
+  }
+}
+
+/**
+ * Format a duration between two dates as a human-readable string.
+ *
+ * Examples:
+ * - "5s" (5 seconds)
+ * - "2m 30s" (2 minutes 30 seconds)
+ * - "1h 15m 20s" (1 hour 15 minutes 20 seconds)
+ */
+export function formatDuration(start: Date, end?: Date): string {
+  const duration = (end ?? new Date()).getTime() - start.getTime();
+  const seconds = Math.floor(duration / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  }
+  return `${seconds}s`;
+}

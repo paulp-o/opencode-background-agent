@@ -35,3 +35,5 @@ These documents should be referenced frequently when:
 - Planning new features
 
 All documentation files are sourced from: `https://github.com/anomalyco/opencode/tree/dev/packages/web/src/content/docs`
+
+* Using ToDo tool is ESSENTIAL!!!

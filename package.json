@@ -1,6 +1,6 @@
 {
   "name": "@paulp-o/opencode-background-agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Background task management plugin for OpenCode AI",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,7 +46,7 @@
     "typescript": "^5.7.2"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --format esm",
+    "build": "bun build src/index.ts --outdir dist --format esm --minify --sourcemap=linked",
     "build:types": "tsc --emitDeclarationOnly",
     "build:all": "rm -rf dist && bun run build && bun run build:types",
     "clean": "rm -rf dist",
@@ -59,5 +59,8 @@
     "release": "bun run scripts/release.ts",
     "release:dry": "bun run scripts/release.ts --dry-run",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s"
+  },
+  "dependencies": {
+    "zod": "^4.3.5"
   }
 }
