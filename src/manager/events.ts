@@ -37,6 +37,7 @@ export async function startEventSubscription(
 
 /**
  * Handles incoming events and triggers appropriate actions.
+ * Primary completion detection mechanism via session.idle events.
  */
 export function handleEvent(
   event: {
@@ -46,9 +47,10 @@ export function handleEvent(
   callbacks: {
     clearAllTasks: () => void;
     getTasksArray: () => BackgroundTask[];
+    notifyParentSession: (task: BackgroundTask) => void;
   }
 ): void {
-  const { clearAllTasks, getTasksArray } = callbacks;
+  const { clearAllTasks, getTasksArray, notifyParentSession } = callbacks;
   const props = event.properties;
 
   // Debug: log all events to understand what's being received
@@ -96,11 +98,13 @@ export function handleEvent(
     if (!sessionID) return;
 
     const task = getTasksArray().find((t) => t.sessionID === sessionID);
-    if (!task || task.status !== "running") return;
+    // Handle both running tasks and resumed tasks
+    if (!task || (task.status !== "running" && task.status !== "resumed")) return;
 
     task.status = "completed";
     task.completedAt = new Date().toISOString();
-    // Note: notifyParentSession is handled by the caller
+    // Trigger notification immediately on event-based completion
+    notifyParentSession(task);
   }
 
   if (event.type === "session.deleted") {

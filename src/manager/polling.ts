@@ -2,10 +2,18 @@ import { COMPLETION_DISPLAY_DURATION } from "../constants";
 import type { BackgroundTask, OpencodeClient } from "../types";
 
 /**
- * Start polling for task status updates.
+ * FALLBACK & PROGRESS MECHANISM: Polling for task status updates.
  *
- * Sets up an interval that polls every 100ms to check task progress.
+ * Primary completion detection is event-based (session.idle events).
+ * Polling serves two purposes:
+ * 1. Fallback for when events are missed (e.g., during reconnection)
+ * 2. Progress updates for the toast display (tool calls, etc.)
+ *
+ * Polls every 100ms for responsive progress updates.
+ * Events provide immediate completion notification when available.
  */
+const POLLING_INTERVAL_MS = 100;
+
 export function startPolling(
   pollingInterval: Timer | undefined,
   pollFn: () => void
@@ -14,7 +22,7 @@ export function startPolling(
 
   return setInterval(() => {
     pollFn();
-  }, 100);
+  }, POLLING_INTERVAL_MS);
 }
 
 /**
@@ -29,11 +37,14 @@ export function stopPolling(pollingInterval: Timer | undefined): void {
 }
 
 /**
- * Poll running tasks to check their status and progress.
+ * FALLBACK: Poll running/resumed tasks to check their status and progress.
  *
- * This is the main polling function that:
+ * Primary completion detection is via session.idle events. This polling
+ * function serves as a fallback mechanism when events are missed.
+ *
+ * This function:
  * - Checks if parent session still exists
- * - Updates task status when sessions become idle
+ * - Updates task status when sessions become idle (fallback detection)
  * - Updates task progress (tool calls, etc.)
  * - Cleans up old completed tasks
  * - Stops polling when no active tasks remain
@@ -85,7 +96,8 @@ export async function pollRunningTasks(
     }
 
     for (const task of tasks.values()) {
-      if (task.status !== "running") continue;
+      // Handle both running and resumed tasks
+      if (task.status !== "running" && task.status !== "resumed") continue;
 
       const sessionStatus = allStatuses[task.sessionID];
 
@@ -125,8 +137,10 @@ export async function pollRunningTasks(
       await updateTaskProgress(task);
     }
 
-    // Check if any running tasks remain
-    const hasRunningTasks = getTasksArray().some((t) => t.status === "running");
+    // Check if any running or resumed tasks remain
+    const hasRunningTasks = getTasksArray().some(
+      (t) => t.status === "running" || t.status === "resumed"
+    );
 
     // Clean up old completed tasks when no running tasks (only after result retrieved)
     if (!hasRunningTasks) {
@@ -144,7 +158,7 @@ export async function pollRunningTasks(
 
     // Check if we should continue polling
     const hasActiveOrRecentTasks = getTasksArray().some((t) => {
-      if (t.status === "running") return true;
+      if (t.status === "running" || t.status === "resumed") return true;
       if (t.completedAt) {
         const completedTime = new Date(t.completedAt).getTime();
         return now - completedTime <= COMPLETION_DISPLAY_DURATION;

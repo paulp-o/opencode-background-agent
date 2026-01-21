@@ -8,3 +8,4 @@ export { createBackgroundCancel } from "./cancel";
 export { createBackgroundResume } from "./resume";
 export { createBackgroundList } from "./list";
 export { createBackgroundClear } from "./clear";
+export { createBackgroundBlock } from "./block";

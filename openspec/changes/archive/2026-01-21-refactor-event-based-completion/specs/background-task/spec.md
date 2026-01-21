@@ -85,8 +85,19 @@ The system SHALL support resuming conversations with completed background tasks 
 - **WHEN** user attempts to resume a task whose session no longer exists
 - **THEN** system returns error with suggestion to start a new background_task
 
-## REMOVED Requirements
+## REMOVED Scenarios
 
-### Requirement: Conditional notification on retrieval
+### Scenario: Conditional notification on retrieval
+**Parent Requirement**: Task Result Retrieval
 **Reason**: The `block` parameter is being removed from `background_output`. Notifications are always sent when tasks complete (via event-based detection). The new `background_block` tool provides explicit blocking when needed.
 **Migration**: Use `background_block` tool to wait for task completion instead of `background_output` with `block=true`.
+
+### Scenario: Resume with blocking mode
+**Parent Requirement**: Task Conversation Resumption
+**Reason**: The `block` parameter is being removed from `background_resume` to make it consistent with `background_task`. Use `background_block` after resume if blocking is needed.
+**Migration**: Call `background_resume`, then call `background_block` with the task_id to wait for the response.
+
+### Scenario: Resume with async mode
+**Parent Requirement**: Task Conversation Resumption
+**Reason**: This scenario is being replaced. The `block=false` parameter is no longer needed since resume is always async (notification-based).
+**Migration**: Simply call `background_resume` - it's now always notification-based.

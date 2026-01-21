@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { BackgroundTask } from "../../types";
+import { createBackgroundBlock } from "../block";
 import { createBackgroundCancel } from "../cancel";
 import { createBackgroundClear } from "../clear";
 import { createBackgroundList } from "../list";
@@ -159,6 +160,111 @@ describe("tool factories", () => {
       expect(result).toContain("Running tasks aborted: 1");
       expect(result).toContain("Total tasks cleared: 2");
       expect(clearMock).toHaveBeenCalled();
+    });
+  });
+
+  describe("createBackgroundBlock", () => {
+    test("creates a tool with correct description", () => {
+      const mockManager = {
+        getTask: mock(() => undefined),
+        waitForTasks: mock(() => Promise.resolve(new Map())),
+      };
+      const tool = createBackgroundBlock(mockManager);
+
+      expect(tool.description).toContain("Wait for specific background tasks");
+    });
+
+    test("returns error when task_ids is empty", async () => {
+      const mockManager = {
+        getTask: mock(() => undefined),
+        waitForTasks: mock(() => Promise.resolve(new Map())),
+      };
+      const tool = createBackgroundBlock(mockManager);
+
+      const result = await tool.execute({ task_ids: [] });
+
+      expect(result).toContain("task_ids array is required");
+    });
+
+    test("returns immediately if all tasks already completed", async () => {
+      const completedTask = createMockTask({
+        id: "bg_1",
+        status: "completed",
+        completedAt: new Date().toISOString(),
+      });
+      const waitMock = mock(() => Promise.resolve(new Map()));
+      const mockManager = {
+        getTask: mock(() => completedTask),
+        waitForTasks: waitMock,
+      };
+      const tool = createBackgroundBlock(mockManager);
+
+      const result = await tool.execute({ task_ids: ["bg_1"] });
+
+      expect(result).toContain("All Tasks Completed");
+      expect(waitMock).not.toHaveBeenCalled();
+    });
+
+    test("waits for running tasks to complete", async () => {
+      const runningTask = createMockTask({ id: "bg_1", status: "running" });
+      const completedTask = createMockTask({
+        id: "bg_1",
+        status: "completed",
+        completedAt: new Date().toISOString(),
+      });
+
+      const waitMock = mock(() => {
+        const results = new Map<string, BackgroundTask | null>();
+        results.set("bg_1", completedTask);
+        return Promise.resolve(results);
+      });
+      const mockManager = {
+        getTask: mock(() => runningTask),
+        waitForTasks: waitMock,
+      };
+      const tool = createBackgroundBlock(mockManager);
+
+      const result = await tool.execute({ task_ids: ["bg_1"] });
+
+      expect(waitMock).toHaveBeenCalled();
+      expect(result).toContain("bg_1");
+    });
+
+    test("handles task not found", async () => {
+      const waitMock = mock(() => {
+        const results = new Map<string, BackgroundTask | null>();
+        results.set("nonexistent", null);
+        return Promise.resolve(results);
+      });
+      const mockManager = {
+        getTask: mock(() => undefined),
+        waitForTasks: waitMock,
+      };
+      const tool = createBackgroundBlock(mockManager);
+
+      const result = await tool.execute({ task_ids: ["nonexistent"] });
+
+      expect(result).toContain("Not found");
+    });
+
+    test("reports timeout when tasks don't complete", async () => {
+      const runningTask = createMockTask({ id: "bg_1", status: "running" });
+
+      const waitMock = mock(() => {
+        const results = new Map<string, BackgroundTask | null>();
+        results.set("bg_1", runningTask); // Still running after wait
+        return Promise.resolve(results);
+      });
+      const mockManager = {
+        getTask: mock(() => runningTask),
+        waitForTasks: waitMock,
+      };
+      const tool = createBackgroundBlock(mockManager);
+
+      const result = await tool.execute({ task_ids: ["bg_1"], timeout: 100 });
+
+      expect(result).toContain("Timeout");
+      expect(result).toContain("still running");
     });
   });
 });

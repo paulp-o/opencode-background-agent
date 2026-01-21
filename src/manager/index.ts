@@ -99,6 +99,53 @@ export class BackgroundManager {
     return checkSessionExists(sessionID, this.client);
   }
 
+  /**
+   * Wait for multiple tasks to complete (used by background_block tool).
+   * Returns a Map of task_id -> task (or null if not found).
+   */
+  async waitForTasks(
+    taskIds: string[],
+    timeoutMs: number
+  ): Promise<Map<string, BackgroundTask | null>> {
+    const results = new Map<string, BackgroundTask | null>();
+    const startTime = Date.now();
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    while (Date.now() - startTime < timeoutMs) {
+      let allDone = true;
+
+      for (const taskId of taskIds) {
+        const task = this.tasks.get(taskId);
+        if (!task) {
+          results.set(taskId, null);
+          continue;
+        }
+
+        // Check if task is done (completed, error, or cancelled)
+        if (task.status === "completed" || task.status === "error" || task.status === "cancelled") {
+          results.set(taskId, task);
+        } else {
+          allDone = false;
+        }
+      }
+
+      if (allDone) {
+        break;
+      }
+
+      await delay(500);
+    }
+
+    // Fill in any remaining tasks
+    for (const taskId of taskIds) {
+      if (!results.has(taskId)) {
+        results.set(taskId, this.tasks.get(taskId) ?? null);
+      }
+    }
+
+    return results;
+  }
+
   async sendResumePrompt(
     task: BackgroundTask,
     message: string,
@@ -298,6 +345,7 @@ export class BackgroundManager {
       handleEvent(event, {
         clearAllTasks: () => this.clearAllTasks(),
         getTasksArray: () => this.getAllTasks(),
+        notifyParentSession: (task) => this.notifyParentSession(task),
       })
     );
   }

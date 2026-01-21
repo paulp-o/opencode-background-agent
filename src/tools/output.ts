@@ -3,7 +3,7 @@ import { formatTaskResult, formatTaskStatus } from "../helpers";
 import type { BackgroundTask } from "../types";
 
 /**
- * Creates the background_output tool for retrieving task results
+ * Creates the background_output tool for retrieving task status and results (non-blocking)
  * @param manager - BackgroundManager instance with getTask(), checkAndUpdateTaskStatus() methods
  * @returns Tool definition for background_output
  */
@@ -13,6 +13,7 @@ export function createBackgroundOutput(manager: {
     task: BackgroundTask,
     skipNotification?: boolean
   ): Promise<BackgroundTask>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getTaskMessages(sessionID: string): Promise<any[]>;
 }): ToolDefinition {
   return tool({
@@ -20,29 +21,23 @@ export function createBackgroundOutput(manager: {
 
 Arguments:
 - task_id: Required task ID to get output from
-- block: If true, wait for task completion. If false (default), return current status immediately.
-- timeout: Max wait time in ms when blocking (default: 60000, max: 600000)
 
 Returns:
-- When not blocking: Returns current status
-- When blocking: Waits for completion, then returns full result`,
+- Current status and result (if completed) immediately (non-blocking)
+
+Note: This tool returns immediately. Use \`background_block\` if you need to wait for task completion.`,
     args: {
-      task_id: tool.schema.string(),
-      block: tool.schema.boolean().nonoptional(),
-      timeout: tool.schema.number().optional(),
+      task_id: tool.schema.string().nonoptional(),
     },
-    async execute(args: { task_id: string; block?: boolean; timeout?: number }) {
+    async execute(args: { task_id: string }) {
       try {
         let task = manager.getTask(args.task_id);
         if (!task) {
           return `Task not found: ${args.task_id}`;
         }
 
-        // Don't skip notification on initial check (parent isn't blocking yet)
+        // Update task status (may detect completion via fallback mechanisms)
         task = await manager.checkAndUpdateTaskStatus(task, false);
-
-        const shouldBlock = args.block === true;
-        const timeoutMs = Math.min(args.timeout ?? 60000, 600000);
 
         if (task.status === "completed") {
           if (!task.resultRetrievedAt) {
@@ -60,46 +55,8 @@ Returns:
           return formatTaskStatus(task);
         }
 
-        if (!shouldBlock) {
-          return formatTaskStatus(task);
-        }
-
-        const startTime = Date.now();
-        const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-        while (Date.now() - startTime < timeoutMs) {
-          await delay(1000);
-
-          let currentTask = manager.getTask(args.task_id);
-          if (!currentTask) {
-            return `Task was deleted: ${args.task_id}`;
-          }
-
-          // Skip notification when blocking - parent session can't receive prompts while waiting for tool result
-          currentTask = await manager.checkAndUpdateTaskStatus(currentTask, true);
-
-          if (currentTask.status === "completed") {
-            if (!currentTask.resultRetrievedAt) {
-              currentTask.resultRetrievedAt = new Date().toISOString();
-            }
-            return await formatTaskResult(currentTask, (sessionID: string) =>
-              manager.getTaskMessages(sessionID)
-            );
-          }
-
-          if (currentTask.status === "error" || currentTask.status === "cancelled") {
-            if (!currentTask.resultRetrievedAt) {
-              currentTask.resultRetrievedAt = new Date().toISOString();
-            }
-            return formatTaskStatus(currentTask);
-          }
-        }
-
-        const finalTask = manager.getTask(args.task_id);
-        if (!finalTask) {
-          return `Task was deleted: ${args.task_id}`;
-        }
-        return `Timeout exceeded (${timeoutMs}ms). Task still ${finalTask.status}.\n\n${formatTaskStatus(finalTask)}`;
+        // Task is still running or resumed - return current status
+        return formatTaskStatus(task);
       } catch (error) {
         return `Error getting output: ${error instanceof Error ? error.message : String(error)}`;
       }

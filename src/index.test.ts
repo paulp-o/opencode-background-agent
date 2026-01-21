@@ -68,6 +68,7 @@ describe("Background Agent Plugin", () => {
 
     expect(result.tool).toHaveProperty("background_task");
     expect(result.tool).toHaveProperty("background_output");
+    expect(result.tool).toHaveProperty("background_block");
     expect(result.tool).toHaveProperty("background_cancel");
     expect(result.tool).toHaveProperty("background_resume");
     expect(result.tool).toHaveProperty("background_list");
@@ -164,8 +165,9 @@ describe("background_resume tool", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
+    // background_resume is now always non-blocking (notification-based)
     const resumeOutput1 = await resumeTool.execute(
-      { task_id: taskId, message: "follow up 1", block: false },
+      { task_id: taskId, message: "follow up 1" },
       { sessionID: "parent", messageID: "msg", agent: "test" }
     );
     expect(resumeOutput1).toContain("Resume initiated");
@@ -209,16 +211,12 @@ describe("background_resume tool", () => {
     expect(resumeOutput).toContain("Session expired");
   });
 
-  test("should increment resumeCount on successful resume", async () => {
-    let promptAsyncCalls = 0;
+  test("should increment resumeCount on resume initiation", async () => {
     const mockContext = createMockContext();
     mockContext.client.session.status = async () => ({
       data: { "test-session": { type: "idle" } },
     });
-    mockContext.client.session.promptAsync = async () => {
-      promptAsyncCalls++;
-      return {};
-    };
+    mockContext.client.session.promptAsync = async () => ({});
     mockContext.client.session.messages = async () => ({
       data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "response" }] }],
     });
@@ -237,16 +235,21 @@ describe("background_resume tool", () => {
 
     await new Promise((r) => setTimeout(r, 150));
 
+    // background_resume is now always non-blocking (notification-based)
+    // Each resume initiation increments the count
     const resumeOutput1 = await resumeTool.execute(
-      { task_id: taskId, message: "first follow up", block: true, timeout: 1000 },
+      { task_id: taskId, message: "first follow up" },
       { sessionID: "parent", messageID: "msg", agent: "test" }
     );
-    expect(resumeOutput1).toContain("count: 1");
+    expect(resumeOutput1).toContain("Resume count: 1");
+
+    // Wait for the resume to complete before trying another
+    await new Promise((r) => setTimeout(r, 200));
 
     const resumeOutput2 = await resumeTool.execute(
-      { task_id: taskId, message: "second follow up", block: true, timeout: 1000 },
+      { task_id: taskId, message: "second follow up" },
       { sessionID: "parent", messageID: "msg", agent: "test" }
     );
-    expect(resumeOutput2).toContain("count: 2");
+    expect(resumeOutput2).toContain("Resume count: 2");
   });
 });
