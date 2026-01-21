@@ -145,4 +145,4 @@ temp/
 # docs
 .cursor/
 .npmrc
-.docs/
+docs/
