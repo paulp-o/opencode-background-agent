@@ -11,7 +11,8 @@ import {
 
 // Re-export types for consumers
 export type { BackgroundTask, BackgroundTaskStatus, TaskProgress, LaunchInput } from "./types";
-export { BackgroundManager } from "./manager";
+// Note: BackgroundManager is not exported to avoid OpenCode plugin loader issues
+// (it tries to call all exports as functions, which fails for classes)
 
 /**
  * OpenCode Background Agent Plugin
