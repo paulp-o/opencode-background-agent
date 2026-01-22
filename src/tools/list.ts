@@ -1,5 +1,6 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
 import { formatDuration, getStatusIcon, shortId } from "../helpers";
+import { ERROR_MESSAGES, FORMAT_TEMPLATES, TOOL_DESCRIPTIONS } from "../prompts";
 import type { BackgroundTask } from "../types";
 
 // =============================================================================
@@ -10,12 +11,7 @@ export function createBackgroundList(manager: {
   getAllTasks(): BackgroundTask[];
 }): ToolDefinition {
   return tool({
-    description: `List all background tasks.
-
-Shows all running, completed, error, and cancelled background tasks with their status.
-
-Arguments:
-- status: Optional filter by status ("running", "completed", "error", "cancelled").`,
+    description: TOOL_DESCRIPTIONS.backgroundList,
     args: {
       status: tool.schema.string().optional().describe("Filter by status"),
     },
@@ -29,16 +25,13 @@ Arguments:
 
         if (tasks.length === 0) {
           return args.status
-            ? `No background tasks found with status "${args.status}".`
-            : "No background tasks found.";
+            ? ERROR_MESSAGES.noTasksWithStatus(args.status)
+            : ERROR_MESSAGES.noTasksFound;
         }
 
         tasks.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
-        const header = `# Background Tasks
-
-| Task ID | Description | Agent | Status | Duration |
-|---------|-------------|-------|--------|----------|`;
+        const header = FORMAT_TEMPLATES.listHeader;
 
         const rows = tasks
           .map((task) => {
@@ -61,9 +54,9 @@ Arguments:
 ${rows}
 
 ---
-**Total: ${tasks.length}** | ⏳ ${running} running | ✓ ${completed} completed | ✗ ${errored} error | ⊘ ${cancelled} cancelled`;
+${FORMAT_TEMPLATES.listSummary(tasks.length, running, completed, errored, cancelled)}`;
       } catch (error) {
-        return `Error listing tasks: ${error instanceof Error ? error.message : String(error)}`;
+        return ERROR_MESSAGES.listFailed(error instanceof Error ? error.message : String(error));
       }
     },
   });

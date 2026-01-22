@@ -1,5 +1,6 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
-import { formatTaskResult, formatTaskStatus, shortId } from "../helpers";
+import { formatTaskResult, formatTaskStatus } from "../helpers";
+import { ERROR_MESSAGES, TOOL_DESCRIPTIONS } from "../prompts";
 import type { BackgroundTask } from "../types";
 
 /** Default timeout in seconds for blocking mode */
@@ -24,17 +25,7 @@ export function createBackgroundOutput(manager: {
   getTaskMessages(sessionID: string): Promise<any[]>;
 }): ToolDefinition {
   return tool({
-    description: `Get output from a background task.
-
-Arguments:
-- task_id: Required task ID to get output from
-- block: Optional boolean to wait for task completion (default: false)
-- timeout: Optional timeout in seconds when blocking (default: 30, max: 600)
-
-Returns:
-- Current status and result (if completed)
-- When block=true, waits until task completes or timeout is reached
-- When block=false (default), returns immediately with current status`,
+    description: TOOL_DESCRIPTIONS.backgroundOutput,
     args: {
       task_id: tool.schema.string().nonoptional(),
       block: tool.schema.boolean().optional(),
@@ -45,12 +36,12 @@ Returns:
         // Resolve short ID or prefix to full ID
         const resolvedId = manager.resolveTaskId(args.task_id);
         if (!resolvedId) {
-          return `Task not found: ${args.task_id}`;
+          return ERROR_MESSAGES.taskNotFound(args.task_id);
         }
 
         let task = manager.getTask(resolvedId);
         if (!task) {
-          return `Task not found: ${args.task_id}`;
+          return ERROR_MESSAGES.taskNotFound(args.task_id);
         }
 
         const shouldBlock = args.block === true;
@@ -101,7 +92,7 @@ Returns:
         // (may happen if blocking timed out)
         return formatTaskStatus(task);
       } catch (error) {
-        return `Error getting output: ${error instanceof Error ? error.message : String(error)}`;
+        return ERROR_MESSAGES.outputFailed(error instanceof Error ? error.message : String(error));
       }
     },
   });

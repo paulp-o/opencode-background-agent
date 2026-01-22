@@ -1,5 +1,6 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
 import { shortId } from "../helpers";
+import { ERROR_MESSAGES, SUCCESS_MESSAGES, TOOL_DESCRIPTIONS } from "../prompts";
 import type { BackgroundTask } from "../types";
 
 /**
@@ -13,12 +14,7 @@ export function createBackgroundCancel(manager: {
   cancelTask(taskId: string): Promise<void>;
 }): ToolDefinition {
   return tool({
-    description: `Cancel a running background task.
-
-Only works for tasks with status "running". Aborts the background session and marks the task as cancelled.
-
-Arguments:
-- task_id: Required task ID to cancel.`,
+    description: TOOL_DESCRIPTIONS.backgroundCancel,
     args: {
       task_id: tool.schema.string(),
       // .describe("Task ID to cancel"),
@@ -28,23 +24,19 @@ Arguments:
         // Resolve short ID or prefix to full ID
         const resolvedId = manager.resolveTaskId(args.task_id);
         if (!resolvedId) {
-          return `Task not found: ${args.task_id}`;
+          return ERROR_MESSAGES.taskNotFound(args.task_id);
         }
 
         const task = manager.getTask(resolvedId);
         if (!task) {
-          return `Task not found: ${args.task_id}`;
+          return ERROR_MESSAGES.taskNotFound(args.task_id);
         }
 
         await manager.cancelTask(resolvedId);
 
-        return `⊘ **Task cancelled**
-
-Task ID: \`${shortId(task.sessionID)}\`
-Description: ${task.description}
-Status: ⊘ cancelled`;
+        return SUCCESS_MESSAGES.taskCancelled(shortId(task.sessionID), task.description);
       } catch (error) {
-        return `Error cancelling task: ${error instanceof Error ? error.message : String(error)}`;
+        return ERROR_MESSAGES.cancelFailed(error instanceof Error ? error.message : String(error));
       }
     },
   });

@@ -1,4 +1,5 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
+import { ERROR_MESSAGES, SUCCESS_MESSAGES, TOOL_DESCRIPTIONS } from "../prompts";
 
 // =============================================================================
 // Background Clear Tool Factory
@@ -9,10 +10,7 @@ export function createBackgroundClear(manager: {
   clearAllTasks(): void;
 }): ToolDefinition {
   return tool({
-    description: `Clear and abort all background tasks immediately.
-
-Use this to stop all running background agents and clear the task list.
-This is useful when you want to start fresh or cancel all pending work.`,
+    description: TOOL_DESCRIPTIONS.backgroundClear,
     args: {},
     async execute() {
       try {
@@ -23,15 +21,12 @@ This is useful when you want to start fresh or cancel all pending work.`,
         manager.clearAllTasks();
 
         if (totalCount === 0) {
-          return `No background tasks to clear.`;
+          return ERROR_MESSAGES.noTasksToClear;
         }
 
-        return `✓ **Cleared all background tasks**
-
-Running tasks aborted: ${runningCount}
-Total tasks cleared: ${totalCount}`;
+        return SUCCESS_MESSAGES.clearedAllTasks(runningCount, totalCount);
       } catch (error) {
-        return `Error clearing tasks: ${error instanceof Error ? error.message : String(error)}`;
+        return ERROR_MESSAGES.clearFailed(error instanceof Error ? error.message : String(error));
       }
     },
   });

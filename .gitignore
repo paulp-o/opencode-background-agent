@@ -147,3 +147,6 @@ temp/
 .npmrc
 docs/
 docs/*
+
+# test
+test_heuristic/

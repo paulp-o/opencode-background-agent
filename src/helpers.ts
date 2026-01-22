@@ -1,3 +1,4 @@
+import { FORMAT_TEMPLATES, PLACEHOLDER_TEXT, STATUS_NOTES } from "./prompts";
 import type { BackgroundTask, BackgroundTaskStatus } from "./types";
 
 // =============================================================================
@@ -92,33 +93,29 @@ export function formatTaskStatus(task: BackgroundTask): string {
 
   let progressSection = "";
   if (task.progress?.lastTools && task.progress.lastTools.length > 0) {
-    progressSection = `\n| Last tools | ${task.progress.lastTools.join(" → ")} |`;
+    progressSection = FORMAT_TEMPLATES.progressSection(task.progress.lastTools);
   }
 
   let statusNote = "";
   if (task.status === "running") {
-    statusNote = "\n\n> ⏳ **Running**: Task is still in progress. Check back later for results.";
+    statusNote = STATUS_NOTES.running;
   } else if (task.status === "error") {
-    statusNote = `\n\n> ✗ **Failed**: ${task.error || "Unknown error"}`;
+    statusNote = STATUS_NOTES.failed(task.error || "Unknown error");
   } else if (task.status === "cancelled") {
-    statusNote = "\n\n> ⊘ **Cancelled**: Task was cancelled before completion.";
+    statusNote = STATUS_NOTES.cancelled;
   }
 
-  return `# ${icon} Task Status
-
-| Field | Value |
-|-------|-------|
-| Task ID | \`${shortId(task.sessionID)}\` |
-| Description | ${task.description} |
-| Agent | ${task.agent} |
-| Status | ${icon} **${task.status}** |
-| Duration | ${duration} |${progressSection}
-${statusNote}
-## Original Prompt
-
-\`\`\`
-${promptPreview}
-\`\`\``;
+  return FORMAT_TEMPLATES.taskStatus(
+    icon,
+    shortId(task.sessionID),
+    task.description,
+    task.agent,
+    task.status,
+    duration,
+    progressSection,
+    statusNote,
+    promptPreview
+  );
 }
 
 // Interface for getTaskMessages return type
@@ -135,33 +132,23 @@ export async function formatTaskResult(
     const messages = await getMessages(task.sessionID);
 
     if (!Array.isArray(messages) || messages.length === 0) {
-      return `✓ **Task Completed**
-
-| Field | Value |
-|-------|-------|
-| Task ID | \`${shortId(task.sessionID)}\` |
-| Description | ${task.description} |
-| Duration | ${formatDuration(task.startedAt, task.completedAt)} |
-
----
-
-(No messages found)`;
+      return FORMAT_TEMPLATES.taskResult(
+        shortId(task.sessionID),
+        task.description,
+        formatDuration(task.startedAt, task.completedAt),
+        PLACEHOLDER_TEXT.noMessagesFound
+      );
     }
 
     const assistantMessages = messages.filter((m) => m.info?.role === "assistant");
 
     if (assistantMessages.length === 0) {
-      return `✓ **Task Completed**
-
-| Field | Value |
-|-------|-------|
-| Task ID | \`${shortId(task.sessionID)}\` |
-| Description | ${task.description} |
-| Duration | ${formatDuration(task.startedAt, task.completedAt)} |
-
----
-
-(No assistant response found)`;
+      return FORMAT_TEMPLATES.taskResult(
+        shortId(task.sessionID),
+        task.description,
+        formatDuration(task.startedAt, task.completedAt),
+        PLACEHOLDER_TEXT.noAssistantResponse
+      );
     }
 
     const lastMessage = assistantMessages[assistantMessages.length - 1];
@@ -171,27 +158,19 @@ export async function formatTaskResult(
       .filter((text) => text.length > 0)
       .join("\n");
 
-    return `✓ **Task Completed**
-
-| Field | Value |
-|-------|-------|
-| Task ID | \`${shortId(task.sessionID)}\` |
-| Description | ${task.description} |
-| Duration | ${formatDuration(task.startedAt, task.completedAt)} |
-
----
-
-${textContent || "(No text output)"}`;
+    return FORMAT_TEMPLATES.taskResult(
+      shortId(task.sessionID),
+      task.description,
+      formatDuration(task.startedAt, task.completedAt),
+      textContent || PLACEHOLDER_TEXT.noTextOutput
+    );
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    return `Task Result
-
-Task ID: ${shortId(task.sessionID)}
-Description: ${task.description}
-Duration: ${formatDuration(task.startedAt, task.completedAt)}
-
----
-
-Error fetching messages: ${errMsg}`;
+    return FORMAT_TEMPLATES.taskResultError(
+      shortId(task.sessionID),
+      task.description,
+      formatDuration(task.startedAt, task.completedAt),
+      errMsg
+    );
   }
 }

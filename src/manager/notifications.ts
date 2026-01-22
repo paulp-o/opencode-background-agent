@@ -1,5 +1,6 @@
 import { COMPLETION_DISPLAY_DURATION, SPINNER_FRAMES } from "../constants";
 import { shortId } from "../helpers";
+import { NOTIFICATION_MESSAGES, PLACEHOLDER_TEXT, TOAST_TITLES } from "../prompts";
 import type { BackgroundTask, OpencodeClient } from "../types";
 
 // =============================================================================
@@ -93,7 +94,7 @@ export function showProgressToast(
 
   const hiddenCount = batchCompleted.length - visibleCompleted.length;
   if (hiddenCount > 0) {
-    taskLines.push(`   ... and ${hiddenCount} more finished`);
+    taskLines.push(PLACEHOLDER_TEXT.andMoreFinished(hiddenCount));
   }
 
   const progressPercent = totalTasks > 0 ? Math.round((finishedCount / totalTasks) * 100) : 0;
@@ -109,7 +110,9 @@ export function showProgressToast(
   if (!tuiClient.tui?.showToast) return;
 
   const hasRunning = runningTasks.filter((t) => t.batchId === activeBatchId).length > 0;
-  const title = hasRunning ? `${spinner} Background Tasks` : "✓ Tasks complete";
+  const title = hasRunning
+    ? TOAST_TITLES.backgroundTasksRunning(spinner ?? "⏳")
+    : TOAST_TITLES.tasksComplete;
   const variant = hasRunning ? "info" : "success";
 
   tuiClient.tui
@@ -153,10 +156,10 @@ export function notifyParentSession(
   if (tuiClient.tui?.showToast) {
     const toastTitle =
       task.status === "completed"
-        ? "✓ Task completed"
+        ? TOAST_TITLES.taskCompleted
         : task.status === "error"
-          ? "✗ Task failed"
-          : "⊘ Task cancelled";
+          ? TOAST_TITLES.taskFailed
+          : TOAST_TITLES.taskCancelled;
     tuiClient.tui
       .showToast({
         body: {
@@ -169,21 +172,23 @@ export function notifyParentSession(
       .catch(() => {});
   }
 
-  const leftoverWarning =
-    runningTasks > 0
-      ? "WATCH OUT for leftover tasks, you will likely WANT to wait for all tasks to complete."
-      : "";
+  const leftoverWarning = runningTasks > 0 ? NOTIFICATION_MESSAGES.leftoverTasksWarning : "";
   const taskStatusHeader =
     task.status === "completed"
-      ? "✓ **Background task completed**"
+      ? NOTIFICATION_MESSAGES.taskCompleted
       : task.status === "error"
-        ? "✗ **Background task failed**"
-        : "⊘ **Background task cancelled**";
-  const message = `${taskStatusHeader}
-Task "${task.description}" finished in ${duration}.
-Batch progress: ${completedTasks}/${totalTasks} tasks complete, ${runningTasks} still running.
-If you need results immediately, use background_output(task_id="${shortId(task.sessionID)}").
-Otherwise, continue working or just say 'waiting' and halt.${leftoverWarning ? ` ${leftoverWarning}` : ""}`;
+        ? NOTIFICATION_MESSAGES.taskFailed
+        : NOTIFICATION_MESSAGES.taskCancelled;
+  const message = NOTIFICATION_MESSAGES.taskCompletionBody(
+    taskStatusHeader,
+    task.description,
+    duration,
+    completedTasks,
+    totalTasks,
+    runningTasks,
+    shortId(task.sessionID),
+    leftoverWarning
+  );
 
   setTimeout(async () => {
     try {
@@ -223,10 +228,13 @@ export async function notifyResumeComplete(
   try {
     const resumeHeader =
       task.resumeCount > 1
-        ? `✓ **Resume #${task.resumeCount} completed**`
-        : "✓ **Resume completed**";
-    const notification = `${resumeHeader}
-Task "${task.description}" finished. Use background_output(task_id="${shortId(task.sessionID)}") for full response.`;
+        ? NOTIFICATION_MESSAGES.resumeCompletedWithCount(task.resumeCount)
+        : NOTIFICATION_MESSAGES.resumeCompleted;
+    const notification = NOTIFICATION_MESSAGES.resumeCompletionBody(
+      resumeHeader,
+      task.description,
+      shortId(task.sessionID)
+    );
 
     await client.session.prompt({
       path: { id: toolContext.sessionID },
@@ -253,10 +261,15 @@ export async function notifyResumeError(
 ): Promise<void> {
   try {
     const resumeHeader =
-      task.resumeCount > 1 ? `✗ **Resume #${task.resumeCount} failed**` : "✗ **Resume failed**";
-    const notification = `${resumeHeader}
-Task "${task.description}" failed: ${errorMessage}
-Use background_output(task_id="${shortId(task.sessionID)}") for more details.`;
+      task.resumeCount > 1
+        ? NOTIFICATION_MESSAGES.resumeFailedWithCount(task.resumeCount)
+        : NOTIFICATION_MESSAGES.resumeFailed;
+    const notification = NOTIFICATION_MESSAGES.resumeErrorBody(
+      resumeHeader,
+      task.description,
+      errorMessage,
+      shortId(task.sessionID)
+    );
 
     await client.session.prompt({
       path: { id: toolContext.sessionID },

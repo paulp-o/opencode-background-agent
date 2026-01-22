@@ -1,5 +1,6 @@
 import type { PluginInput } from "@opencode-ai/plugin";
 import { setTaskStatus } from "../helpers";
+import { SUCCESS_MESSAGES } from "../prompts";
 import { getPersistedTask, loadTasks, saveTask } from "../storage";
 import type { BackgroundTask, LaunchInput, OpencodeClient, PersistedTask } from "../types";
 import { handleEvent, startEventSubscription } from "./events";
@@ -403,12 +404,12 @@ export class BackgroundManager {
             .map((p) => p.text ?? "")
             .filter((text) => text.length > 0)
             .join("\n");
-          return `✓ **Resume Response** (count: ${task.resumeCount})\n\n${textContent || "(No text response)"}`;
+          return SUCCESS_MESSAGES.resumeResponse(task.resumeCount, textContent);
         }
 
         // If session is explicitly idle but no new messages, return
         if (sessionStatus?.type === "idle") {
-          return `✓ **Resume Response** (count: ${task.resumeCount})\n\n(No response found)`;
+          return SUCCESS_MESSAGES.resumeResponseNoContent(task.resumeCount);
         }
       }
     }

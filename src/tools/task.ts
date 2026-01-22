@@ -1,5 +1,6 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
 import { shortId } from "../helpers";
+import { ERROR_MESSAGES, SUCCESS_MESSAGES, TOOL_DESCRIPTIONS, WARNING_MESSAGES } from "../prompts";
 import type { BackgroundTask, LaunchInput } from "../types";
 import { type ResumeManager, executeResume, validateResumeTask } from "./resume";
 
@@ -23,25 +24,7 @@ interface TaskManager extends ResumeManager {
  */
 export function createBackgroundTask(manager: TaskManager): ToolDefinition {
   return tool({
-    description: `Launch a background agent task that runs asynchronously.
-
-The task runs in a separate session while you continue with other work.
-
-Use this for:
-- Long-running research tasks
-- Complex analysis that doesn't need immediate results
-- Parallel workloads to maximize throughput
-
-Arguments:
-- resume: (Optional) Task ID to resume - if provided, enters resume mode
-- description: Short task description (shown in status)
-- prompt: Full detailed prompt for the agent (or follow-up message in resume mode)
-- agent: Agent type to use (any registered agent)
-
-IMPORTANT: You'll be informed when each task is complete.DO NOT assume all tasks were done, check again if all agents you need are complete.
-
-Returns immediately with task ID. The task will run in background and notify you when complete.
-Optionally use \`background_output\` later if you need to check results manually with or without blocking.`,
+    description: TOOL_DESCRIPTIONS.backgroundTask,
     args: {
       resume: tool.schema.string().optional(),
       description: tool.schema.string().nonoptional(),
@@ -83,13 +66,13 @@ async function handleResumeMode(
   // Validate prompt is provided and non-empty
   const trimmedPrompt = args.prompt?.trim();
   if (!trimmedPrompt) {
-    return "Prompt is required when resuming a task";
+    return ERROR_MESSAGES.promptRequired;
   }
 
   // Warn if extra params are provided (but proceed with resume)
   const warnings: string[] = [];
   if (args.agent?.trim() || args.description?.trim()) {
-    warnings.push("Note: agent and description are ignored in resume mode.");
+    warnings.push(WARNING_MESSAGES.resumeModeIgnoresParams);
   }
 
   // Validate the task can be resumed (async - checks disk if not in memory)
@@ -125,7 +108,7 @@ async function handleLaunchMode(
 ): Promise<string> {
   // Validate required params for launch mode
   if (!args.agent || args.agent.trim() === "") {
-    return "Agent parameter is required. Specify which agent to use.";
+    return ERROR_MESSAGES.agentRequired;
   }
 
   try {
@@ -138,12 +121,9 @@ async function handleLaunchMode(
       parentAgent: toolContext.agent,
     });
 
-    return `⏳ **Background task launched**
-Task ID: \`${shortId(task.sessionID)}\`
-
-Task will run in background. You'll be notified when complete.`;
+    return SUCCESS_MESSAGES.taskLaunched(shortId(task.sessionID));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return `Failed to launch background task: ${message}`;
+    return ERROR_MESSAGES.launchFailed(message);
   }
 }

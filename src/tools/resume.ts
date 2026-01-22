@@ -1,4 +1,5 @@
 import { setTaskStatus, shortId } from "../helpers";
+import { ERROR_MESSAGES, SUCCESS_MESSAGES } from "../prompts";
 import type { BackgroundTask } from "../types";
 
 // =============================================================================
@@ -39,7 +40,7 @@ export async function validateResumeTask(
   if (!resolvedId) {
     return {
       valid: false,
-      error: `Task not found: ${taskId}. Use background_list to see available tasks.`,
+      error: ERROR_MESSAGES.taskNotFoundWithHint(taskId),
     };
   }
 
@@ -49,21 +50,21 @@ export async function validateResumeTask(
   if (!task) {
     return {
       valid: false,
-      error: `Task not found: ${taskId}. Use background_list to see available tasks.`,
+      error: ERROR_MESSAGES.taskNotFoundWithHint(taskId),
     };
   }
 
   if (task.status === "resumed") {
     return {
       valid: false,
-      error: "Task is currently being resumed. Wait for completion.",
+      error: ERROR_MESSAGES.taskCurrentlyResuming,
     };
   }
 
   if (task.status !== "completed") {
     return {
       valid: false,
-      error: `Only completed tasks can be resumed. Current status: ${task.status}`,
+      error: ERROR_MESSAGES.onlyCompletedCanResume(task.status),
     };
   }
 
@@ -98,22 +99,16 @@ export async function executeResume(
       await manager.persistTask(task);
       return {
         success: false,
-        error: "Session expired or was deleted. Start a new background_task to continue.",
+        error: ERROR_MESSAGES.sessionExpired,
       };
     }
 
     // Fire async resume - notification will be sent when complete
     manager.sendResumePromptAsync(task, prompt, toolContext);
 
-    // Build success message
-    const resumeCountInfo = task.resumeCount > 1 ? `\nResume count: ${task.resumeCount}` : "";
-
     return {
       success: true,
-      message: `⏳ **Resume initiated**
-Task ID: \`${shortId(task.sessionID)}\`${resumeCountInfo}
-
-Follow-up prompt sent. You'll be notified when the response is ready.`,
+      message: SUCCESS_MESSAGES.resumeInitiated(shortId(task.sessionID), task.resumeCount),
     };
   } catch (error) {
     // On error, set status to error (per spec)
@@ -123,7 +118,7 @@ Follow-up prompt sent. You'll be notified when the response is ready.`,
 
     return {
       success: false,
-      error: `Error resuming task: ${errorMsg}`,
+      error: ERROR_MESSAGES.resumeFailed(errorMsg),
     };
   }
 }
