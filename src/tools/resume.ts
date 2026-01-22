@@ -1,74 +1,108 @@
-import { type ToolDefinition, tool } from "@opencode-ai/plugin";
 import type { BackgroundTask } from "../types";
 
-/**
- * Creates the background_resume tool for resuming completed tasks with follow-up messages (notification-based)
- * @param manager - BackgroundManager instance with getTask(), checkSessionExists(), sendResumePromptAsync() methods
- * @returns Tool definition for background_resume
- */
-export function createBackgroundResume(manager: {
+// =============================================================================
+// Resume Helper Types
+// =============================================================================
+
+export interface ResumeManager {
   getTask(taskId: string): BackgroundTask | undefined;
   checkSessionExists(sessionID: string): Promise<boolean>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResumePromptAsync(task: BackgroundTask, message: string, toolContext: any): Promise<void>;
-}): ToolDefinition {
-  return tool({
-    description: `Resume a completed background task with a follow-up message.
+}
 
-Sends a new prompt to the subagent session and retrieves the response.
-Only completed tasks can be resumed. The task's conversation history is preserved.
+export type ResumeValidationResult =
+  | { valid: true; task: BackgroundTask }
+  | { valid: false; error: string };
 
-Arguments:
-- task_id: Required task ID to resume
-- message: Follow-up prompt to send (same format as background_task prompt)
+// =============================================================================
+// Resume Helper Functions
+// =============================================================================
 
-Returns:
-- Immediately with confirmation (non-blocking)
-- Notifies parent session when response is ready
+/**
+ * Validates that a task can be resumed
+ * @param manager - BackgroundManager instance
+ * @param taskId - Task ID to validate
+ * @returns Validation result with task if valid, or error message
+ */
+export function validateResumeTask(manager: ResumeManager, taskId: string): ResumeValidationResult {
+  const task = manager.getTask(taskId);
 
-Note: Use \`background_block\` with the task_id after resume if you need to wait for the response.`,
-    args: {
-      task_id: tool.schema.string().nonoptional(),
-      message: tool.schema.string().nonoptional(),
-    },
-    async execute(args: { task_id: string; message: string }, toolContext) {
-      const task = manager.getTask(args.task_id);
-      if (!task) {
-        return `Task not found: ${args.task_id}`;
-      }
+  if (!task) {
+    return {
+      valid: false,
+      error: `Task not found: ${taskId}. Use background_list to see available tasks.`,
+    };
+  }
 
-      if (task.status === "resumed") {
-        return "Task is currently being resumed. Wait for completion before sending another message.";
-      }
+  if (task.status === "resumed") {
+    return {
+      valid: false,
+      error: "Task is currently being resumed. Wait for completion.",
+    };
+  }
 
-      if (task.status !== "completed") {
-        return `Cannot resume task: status is "${task.status}". Only completed tasks can be resumed.`;
-      }
+  if (task.status !== "completed") {
+    return {
+      valid: false,
+      error: `Only completed tasks can be resumed. Current status: ${task.status}`,
+    };
+  }
 
-      task.status = "resumed";
-      task.resumeCount++;
+  return { valid: true, task };
+}
 
-      try {
-        const sessionCheck = await manager.checkSessionExists(task.sessionID);
-        if (!sessionCheck) {
-          task.status = "completed";
-          return "Session expired or was deleted. Start a new background_task to continue.";
-        }
+/**
+ * Executes the resume operation on a validated task
+ * @param manager - BackgroundManager instance
+ * @param task - The task to resume (must be validated first)
+ * @param prompt - The follow-up prompt to send
+ * @param toolContext - Tool context for notifications
+ * @returns Success message or error message
+ */
+export async function executeResume(
+  manager: ResumeManager,
+  task: BackgroundTask,
+  prompt: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toolContext: any
+): Promise<{ success: true; message: string } | { success: false; error: string }> {
+  // Set status to resumed and increment count
+  task.status = "resumed";
+  task.resumeCount++;
 
-        // Fire async resume - notification will be sent when complete
-        manager.sendResumePromptAsync(task, args.message, toolContext);
+  try {
+    // Verify session still exists
+    const sessionExists = await manager.checkSessionExists(task.sessionID);
+    if (!sessionExists) {
+      task.status = "completed"; // Revert status
+      return {
+        success: false,
+        error: "Session expired or was deleted. Start a new background_task to continue.",
+      };
+    }
 
-        return `⏳ **Resume initiated**
-Task ID: \`${task.id}\`
-Resume count: ${task.resumeCount}
+    // Fire async resume - notification will be sent when complete
+    manager.sendResumePromptAsync(task, prompt, toolContext);
 
-Follow-up prompt sent. You'll be notified when the response is ready.
-Use \`background_block(["${task.id}"])\` if you need to wait for the response.`;
-      } catch (error) {
-        task.status = "completed";
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return `Error resuming task: ${errorMessage}`;
-      }
-    },
-  });
+    // Build success message
+    const resumeCountInfo = task.resumeCount > 1 ? `\nResume count: ${task.resumeCount}` : "";
+
+    return {
+      success: true,
+      message: `⏳ **Resume initiated**
+Task ID: \`${task.id}\`${resumeCountInfo}
+
+Follow-up prompt sent. You'll be notified when the response is ready.`,
+    };
+  } catch (error) {
+    // On error, set status to error (per spec)
+    task.status = "error";
+    task.error = error instanceof Error ? error.message : String(error);
+
+    return {
+      success: false,
+      error: `Error resuming task: ${task.error}`,
+    };
+  }
 }

@@ -100,6 +100,15 @@ export class BackgroundManager {
   }
 
   /**
+   * Wait for a single task to complete (used by background_output with block=true).
+   * Returns the task or null if not found.
+   */
+  async waitForTask(taskId: string, timeoutMs: number): Promise<BackgroundTask | null> {
+    const results = await this.waitForTasks([taskId], timeoutMs);
+    return results.get(taskId) ?? null;
+  }
+
+  /**
    * Wait for multiple tasks to complete (used by background_block tool).
    * Returns a Map of task_id -> task (or null if not found).
    */

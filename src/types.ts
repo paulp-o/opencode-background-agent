@@ -33,6 +33,8 @@ export interface BackgroundTask {
 }
 
 export interface LaunchInput {
+  /** Task ID to resume (if provided, enters resume mode) */
+  resume?: string;
   description: string;
   prompt: string;
   agent: string;

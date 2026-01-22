@@ -1,12 +1,10 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin";
 import { BackgroundManager } from "./manager";
 import {
-  createBackgroundBlock,
   createBackgroundCancel,
   createBackgroundClear,
   createBackgroundList,
   createBackgroundOutput,
-  createBackgroundResume,
   createBackgroundTask,
 } from "./tools";
 
@@ -28,9 +26,7 @@ export default async function plugin(ctx: PluginInput): Promise<Hooks> {
     tool: {
       background_task: createBackgroundTask(manager),
       background_output: createBackgroundOutput(manager),
-      background_block: createBackgroundBlock(manager),
       background_cancel: createBackgroundCancel(manager),
-      background_resume: createBackgroundResume(manager),
       background_list: createBackgroundList(manager),
       background_clear: createBackgroundClear(manager),
     },

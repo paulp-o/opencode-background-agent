@@ -48,7 +48,7 @@ Arguments:
                 ? `${task.description.slice(0, 27)}...`
                 : task.description;
             const icon = getStatusIcon(task.status);
-            return `| \`${task.id}\` | ${desc} | ${task.agent} | ${icon} ${task.status} | ${duration} |`;
+            return `| \`${task.id}${task.resumeCount > 0 ? " (resumed)" : ""}\` | ${desc} | ${task.agent} | ${icon} ${task.status} | ${duration} |`;
           })
           .join("\n");
 

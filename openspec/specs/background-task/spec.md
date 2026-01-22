@@ -68,11 +68,12 @@ The system SHALL support grouping related tasks with batch identifiers for organ
 - **AND** batch operations can be performed on all tasks in a batch
 
 ### Requirement: Task Conversation Resumption
-The system SHALL support resuming conversations with completed background tasks by sending follow-up prompts. Resumes are notification-based (non-blocking) consistent with task creation.
+The system SHALL support resuming conversations with completed background tasks via the `background_task(resume: taskId, prompt: message)` interface. Resumes are notification-based (non-blocking) consistent with task creation.
 
 #### Scenario: Resume completed task with follow-up prompt
-- **WHEN** user calls background_resume with a valid task_id and message for a completed task
-- **THEN** system sends the message to the task's existing session
+- **WHEN** user calls background_task with resume param for a completed task
+- **THEN** system validates session exists
+- **AND** sends the prompt to the task's existing session
 - **AND** returns immediately with confirmation (non-blocking)
 - **AND** subagent receives the message with full conversation history
 
@@ -81,10 +82,10 @@ The system SHALL support resuming conversations with completed background tasks 
 - **THEN** system sends notification to parent session with full response
 - **AND** task status returns to "completed"
 
-#### Scenario: Block after resume
+#### Scenario: Wait for resume response
 - **WHEN** user needs to wait for resume response
-- **THEN** user calls `background_block` with the task_id after resume
-- **AND** system blocks until response is received
+- **THEN** user calls `background_output` with task_id and block=true
+- **AND** system waits until response is received
 
 #### Scenario: Reject resume of non-completed task
 - **WHEN** user attempts to resume a task with status other than "completed"
@@ -109,28 +110,6 @@ The system SHALL track the number of times each task has been resumed for visibi
 - **WHEN** a new task is created
 - **THEN** the task's resumeCount is initialized to zero
 
-### Requirement: Explicit Task Blocking
-The system SHALL provide an explicit blocking mechanism via `background_block` tool that waits for specified tasks to complete.
-
-#### Scenario: Block until tasks complete
-- **WHEN** user calls `background_block` with array of task_ids
-- **THEN** system filters out already-completed tasks
-- **AND** blocks until all remaining tasks complete or timeout is reached
-- **AND** returns status summary of all specified tasks
-
-#### Scenario: All tasks already completed
-- **WHEN** user calls `background_block` with task_ids where all tasks are already completed
-- **THEN** system returns immediately with status summary (no blocking)
-
-#### Scenario: Block timeout reached
-- **WHEN** blocking timeout is reached before all tasks complete
-- **THEN** system returns status summary showing which tasks completed vs still running
-
-#### Scenario: Block after resume
-- **WHEN** user calls `background_resume` then `background_block` with same task_id
-- **THEN** system blocks until resume response is received
-- **AND** returns status summary including the resumed task
-
 ### Requirement: Event-Based Completion Detection
 The system SHALL use `session.idle` events as the primary mechanism for detecting task completion, with polling as a fallback.
 
@@ -143,4 +122,17 @@ The system SHALL use `session.idle` events as the primary mechanism for detectin
 - **WHEN** `session.idle` event is missed (e.g., during reconnection)
 - **THEN** polling mechanism detects completion within fallback interval
 - **AND** sends notification to parent session with full result
+
+### Requirement: Task List Resume Indicator
+The system SHALL indicate in task listings when a task has been resumed, providing visual distinction for tasks with conversation history.
+
+#### Scenario: Show resumed indicator
+- **WHEN** user calls background_list
+- **AND** a task has resumeCount greater than 0
+- **THEN** system appends "(resumed)" after the task ID in the listing
+
+#### Scenario: No indicator for new tasks
+- **WHEN** user calls background_list
+- **AND** a task has resumeCount equal to 0
+- **THEN** system shows task ID without any indicator
 

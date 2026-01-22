@@ -108,8 +108,4 @@ The system SHALL provide an explicit blocking mechanism via `background_block` t
 - **THEN** system blocks until resume response is received
 - **AND** returns status summary including the resumed task
 
-## REMOVED Requirements
 
-### Requirement: Standalone Resume Tool
-**Reason**: The `background_resume` tool is being consolidated into `background_task` with an optional `resume` parameter. This reduces the tool count and provides a unified interface for task interaction.
-**Migration**: Use `background_task(resume: 'task_id', prompt: 'follow-up message')` instead of `background_resume(task_id: 'task_id', message: 'follow-up message')`.
