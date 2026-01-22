@@ -1,5 +1,5 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
-import { formatTaskResult, formatTaskStatus } from "../helpers";
+import { formatTaskResult, formatTaskStatus, shortId } from "../helpers";
 import type { BackgroundTask } from "../types";
 
 /** Default timeout in seconds for blocking mode */
@@ -9,11 +9,12 @@ const MAX_TIMEOUT_SECONDS = 600;
 
 /**
  * Creates the background_output tool for retrieving task status and results
- * @param manager - BackgroundManager instance with getTask(), checkAndUpdateTaskStatus(), waitForTask() methods
+ * @param manager - BackgroundManager instance with getTask(), checkAndUpdateTaskStatus(), waitForTask(), resolveTaskId() methods
  * @returns Tool definition for background_output
  */
 export function createBackgroundOutput(manager: {
   getTask(taskId: string): BackgroundTask | undefined;
+  resolveTaskId(idOrPrefix: string): string | null;
   checkAndUpdateTaskStatus(
     task: BackgroundTask,
     skipNotification?: boolean
@@ -41,7 +42,13 @@ Returns:
     },
     async execute(args: { task_id: string; block?: boolean; timeout?: number }) {
       try {
-        let task = manager.getTask(args.task_id);
+        // Resolve short ID or prefix to full ID
+        const resolvedId = manager.resolveTaskId(args.task_id);
+        if (!resolvedId) {
+          return `Task not found: ${args.task_id}`;
+        }
+
+        let task = manager.getTask(resolvedId);
         if (!task) {
           return `Task not found: ${args.task_id}`;
         }
@@ -63,7 +70,7 @@ Returns:
             task.status !== "cancelled"
           ) {
             // Wait for task with skipNotification=true
-            const result = await manager.waitForTask(args.task_id, timeoutMs);
+            const result = await manager.waitForTask(resolvedId, timeoutMs);
             if (result) {
               task = result;
             }

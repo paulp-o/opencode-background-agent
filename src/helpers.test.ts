@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatDuration, formatTaskStatus, getStatusIcon, truncateText } from "./helpers";
+import { formatDuration, formatTaskStatus, getStatusIcon, shortId, truncateText } from "./helpers";
 import type { BackgroundTask } from "./types";
 
 describe("helpers", () => {
@@ -26,6 +26,28 @@ describe("helpers", () => {
       const start = new Date(Date.now() - 5000).toISOString();
       const result = formatDuration(start);
       expect(result).toMatch(/^\d+s$/);
+    });
+  });
+
+  describe("shortId", () => {
+    test("converts full session ID to short format", () => {
+      expect(shortId("ses_41e080918ffeyhQtX6E4vERe4O")).toBe("ses_41e08091");
+    });
+
+    test("handles session IDs with exactly 8 chars after prefix", () => {
+      expect(shortId("ses_12345678")).toBe("ses_12345678");
+    });
+
+    test("handles session IDs with fewer than 8 chars after prefix", () => {
+      expect(shortId("ses_1234")).toBe("ses_1234");
+    });
+
+    test("handles non-standard IDs by taking first 12 chars", () => {
+      expect(shortId("bg_1234567890abcdef")).toBe("bg_123456789");
+    });
+
+    test("handles empty suffix after ses_ prefix", () => {
+      expect(shortId("ses_")).toBe("ses_");
     });
   });
 
@@ -67,7 +89,6 @@ describe("helpers", () => {
 
   describe("formatTaskStatus", () => {
     const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask => ({
-      id: "bg_test123",
       sessionID: "ses_test123",
       parentSessionID: "ses_parent",
       parentMessageID: "msg_parent",
@@ -85,7 +106,7 @@ describe("helpers", () => {
     test("includes task ID and description", () => {
       const task = createMockTask();
       const result = formatTaskStatus(task);
-      expect(result).toContain(task.id);
+      expect(result).toContain(task.sessionID);
       expect(result).toContain(task.description);
     });
 

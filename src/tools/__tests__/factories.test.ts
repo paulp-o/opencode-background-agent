@@ -1,13 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { BackgroundTask } from "../../types";
-import { createBackgroundBlock } from "../block";
 import { createBackgroundCancel } from "../cancel";
 import { createBackgroundClear } from "../clear";
 import { createBackgroundList } from "../list";
 import { createBackgroundTask } from "../task";
 
 const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask => ({
-  id: "bg_test123",
   sessionID: "ses_test123",
   parentSessionID: "ses_parent",
   parentMessageID: "msg_parent",
@@ -22,17 +20,25 @@ const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask
   ...overrides,
 });
 
+// Mock manager that satisfies TaskManager interface for createBackgroundTask
+const createMockTaskManager = (launchMock = mock(() => Promise.resolve(createMockTask()))) => ({
+  launch: launchMock,
+  getTask: mock(() => undefined as BackgroundTask | undefined),
+  checkSessionExists: mock(() => Promise.resolve(true)),
+  sendResumePromptAsync: mock(() => Promise.resolve()),
+});
+
 describe("tool factories", () => {
   describe("createBackgroundTask", () => {
     test("creates a tool with correct description", () => {
-      const mockManager = { launch: mock(() => Promise.resolve(createMockTask())) };
+      const mockManager = createMockTaskManager();
       const tool = createBackgroundTask(mockManager);
 
       expect(tool.description).toContain("background agent task");
     });
 
     test("returns error when agent is empty", async () => {
-      const mockManager = { launch: mock(() => Promise.resolve(createMockTask())) };
+      const mockManager = createMockTaskManager();
       const tool = createBackgroundTask(mockManager);
 
       const result = await tool.execute({ description: "test", prompt: "test", agent: "" }, {
@@ -47,7 +53,7 @@ describe("tool factories", () => {
     test("launches task with valid parameters", async () => {
       const mockTask = createMockTask();
       const launchMock = mock(() => Promise.resolve(mockTask));
-      const mockManager = { launch: launchMock };
+      const mockManager = createMockTaskManager(launchMock);
       const tool = createBackgroundTask(mockManager);
 
       const result = await tool.execute(
@@ -56,7 +62,7 @@ describe("tool factories", () => {
       );
 
       expect(result).toContain("Background task launched");
-      expect(result).toContain(mockTask.id);
+      expect(result).toContain(mockTask.sessionID);
       expect(launchMock).toHaveBeenCalled();
     });
   });
@@ -65,6 +71,7 @@ describe("tool factories", () => {
     test("creates a tool with correct description", () => {
       const mockManager = {
         getTask: mock(() => undefined),
+        resolveTaskId: mock(() => null),
         cancelTask: mock(() => Promise.resolve()),
       };
       const tool = createBackgroundCancel(mockManager);
@@ -75,11 +82,12 @@ describe("tool factories", () => {
     test("returns error when task not found", async () => {
       const mockManager = {
         getTask: mock(() => undefined),
+        resolveTaskId: mock(() => null),
         cancelTask: mock(() => Promise.resolve()),
       };
       const tool = createBackgroundCancel(mockManager);
 
-      const result = await tool.execute({ task_id: "nonexistent" });
+      const result = await tool.execute({ task_id: "nonexistent" }, {} as any);
 
       expect(result).toContain("Task not found");
     });
@@ -97,23 +105,23 @@ describe("tool factories", () => {
       const mockManager = { getAllTasks: mock(() => []) };
       const tool = createBackgroundList(mockManager);
 
-      const result = await tool.execute({});
+      const result = await tool.execute({}, {} as any);
 
       expect(result).toContain("No background tasks found");
     });
 
     test("lists tasks with status filter", async () => {
       const tasks = [
-        createMockTask({ id: "bg_1", status: "running" }),
-        createMockTask({ id: "bg_2", status: "completed" }),
+        createMockTask({ sessionID: "ses_1", status: "running" }),
+        createMockTask({ sessionID: "ses_2", status: "completed" }),
       ];
       const mockManager = { getAllTasks: mock(() => tasks) };
       const tool = createBackgroundList(mockManager);
 
-      const result = await tool.execute({ status: "running" });
+      const result = await tool.execute({ status: "running" }, {} as any);
 
-      expect(result).toContain("bg_1");
-      expect(result).not.toContain("bg_2");
+      expect(result).toContain("ses_1");
+      expect(result).not.toContain("ses_2");
     });
   });
 
@@ -136,7 +144,7 @@ describe("tool factories", () => {
       };
       const tool = createBackgroundClear(mockManager);
 
-      const result = await tool.execute();
+      const result = await tool.execute({}, {} as any);
 
       expect(result).toContain("No background tasks to clear");
       expect(clearMock).toHaveBeenCalled();
@@ -154,117 +162,12 @@ describe("tool factories", () => {
       };
       const tool = createBackgroundClear(mockManager);
 
-      const result = await tool.execute();
+      const result = await tool.execute({}, {} as any);
 
       expect(result).toContain("Cleared all background tasks");
       expect(result).toContain("Running tasks aborted: 1");
       expect(result).toContain("Total tasks cleared: 2");
       expect(clearMock).toHaveBeenCalled();
-    });
-  });
-
-  describe("createBackgroundBlock", () => {
-    test("creates a tool with correct description", () => {
-      const mockManager = {
-        getTask: mock(() => undefined),
-        waitForTasks: mock(() => Promise.resolve(new Map())),
-      };
-      const tool = createBackgroundBlock(mockManager);
-
-      expect(tool.description).toContain("Wait for specific background tasks");
-    });
-
-    test("returns error when task_ids is empty", async () => {
-      const mockManager = {
-        getTask: mock(() => undefined),
-        waitForTasks: mock(() => Promise.resolve(new Map())),
-      };
-      const tool = createBackgroundBlock(mockManager);
-
-      const result = await tool.execute({ task_ids: [] });
-
-      expect(result).toContain("task_ids array is required");
-    });
-
-    test("returns immediately if all tasks already completed", async () => {
-      const completedTask = createMockTask({
-        id: "bg_1",
-        status: "completed",
-        completedAt: new Date().toISOString(),
-      });
-      const waitMock = mock(() => Promise.resolve(new Map()));
-      const mockManager = {
-        getTask: mock(() => completedTask),
-        waitForTasks: waitMock,
-      };
-      const tool = createBackgroundBlock(mockManager);
-
-      const result = await tool.execute({ task_ids: ["bg_1"] });
-
-      expect(result).toContain("All Tasks Completed");
-      expect(waitMock).not.toHaveBeenCalled();
-    });
-
-    test("waits for running tasks to complete", async () => {
-      const runningTask = createMockTask({ id: "bg_1", status: "running" });
-      const completedTask = createMockTask({
-        id: "bg_1",
-        status: "completed",
-        completedAt: new Date().toISOString(),
-      });
-
-      const waitMock = mock(() => {
-        const results = new Map<string, BackgroundTask | null>();
-        results.set("bg_1", completedTask);
-        return Promise.resolve(results);
-      });
-      const mockManager = {
-        getTask: mock(() => runningTask),
-        waitForTasks: waitMock,
-      };
-      const tool = createBackgroundBlock(mockManager);
-
-      const result = await tool.execute({ task_ids: ["bg_1"] });
-
-      expect(waitMock).toHaveBeenCalled();
-      expect(result).toContain("bg_1");
-    });
-
-    test("handles task not found", async () => {
-      const waitMock = mock(() => {
-        const results = new Map<string, BackgroundTask | null>();
-        results.set("nonexistent", null);
-        return Promise.resolve(results);
-      });
-      const mockManager = {
-        getTask: mock(() => undefined),
-        waitForTasks: waitMock,
-      };
-      const tool = createBackgroundBlock(mockManager);
-
-      const result = await tool.execute({ task_ids: ["nonexistent"] });
-
-      expect(result).toContain("Not found");
-    });
-
-    test("reports timeout when tasks don't complete", async () => {
-      const runningTask = createMockTask({ id: "bg_1", status: "running" });
-
-      const waitMock = mock(() => {
-        const results = new Map<string, BackgroundTask | null>();
-        results.set("bg_1", runningTask); // Still running after wait
-        return Promise.resolve(results);
-      });
-      const mockManager = {
-        getTask: mock(() => runningTask),
-        waitForTasks: waitMock,
-      };
-      const tool = createBackgroundBlock(mockManager);
-
-      const result = await tool.execute({ task_ids: ["bg_1"], timeout: 100 });
-
-      expect(result).toContain("Timeout");
-      expect(result).toContain("still running");
     });
   });
 });

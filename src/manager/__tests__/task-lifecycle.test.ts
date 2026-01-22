@@ -3,7 +3,6 @@ import type { BackgroundTask } from "../../types";
 import { cancelTask, checkSessionExists, getTaskMessages } from "../task-lifecycle";
 
 const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask => ({
-  id: "bg_test123",
   sessionID: "ses_test123",
   parentSessionID: "ses_parent",
   parentMessageID: "msg_parent",
@@ -33,25 +32,25 @@ describe("task-lifecycle", () => {
 
     test("throws error when task is not running", async () => {
       const task = createMockTask({ status: "completed" });
-      const tasks = new Map<string, BackgroundTask>([[task.id, task]]);
+      const tasks = new Map<string, BackgroundTask>([[task.sessionID, task]]);
       const mockClient = {
         session: { abort: mock(() => Promise.resolve()) },
       };
 
-      await expect(cancelTask(task.id, tasks, mockClient as any)).rejects.toThrow(
+      await expect(cancelTask(task.sessionID, tasks, mockClient as any)).rejects.toThrow(
         "Cannot cancel task"
       );
     });
 
     test("cancels running task successfully", async () => {
       const task = createMockTask({ status: "running" });
-      const tasks = new Map<string, BackgroundTask>([[task.id, task]]);
+      const tasks = new Map<string, BackgroundTask>([[task.sessionID, task]]);
       const abortMock = mock(() => Promise.resolve());
       const mockClient = {
         session: { abort: abortMock },
       };
 
-      await cancelTask(task.id, tasks, mockClient as any);
+      await cancelTask(task.sessionID, tasks, mockClient as any);
 
       expect(task.status).toBe("cancelled");
       expect(task.completedAt).toBeDefined();

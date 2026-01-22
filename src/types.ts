@@ -12,8 +12,24 @@ export interface TaskProgress {
   lastUpdate: string;
 }
 
+/**
+ * Minimal metadata persisted to disk.
+ * OpenCode stores chat history, we only store what's not available there.
+ */
+export interface PersistedTask {
+  description: string;
+  agent: string;
+  parentSessionID: string;
+  createdAt: string;
+  status: BackgroundTaskStatus;
+  resumeCount?: number;
+}
+
+/**
+ * Full task object used in memory.
+ * sessionID is the task identifier (no separate id field).
+ */
 export interface BackgroundTask {
-  id: string;
   sessionID: string;
   parentSessionID: string;
   parentMessageID: string;

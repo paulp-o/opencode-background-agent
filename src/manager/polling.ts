@@ -1,4 +1,5 @@
 import { COMPLETION_DISPLAY_DURATION } from "../constants";
+import { setTaskStatus } from "../helpers";
 import type { BackgroundTask, OpencodeClient } from "../types";
 
 /**
@@ -61,7 +62,10 @@ export async function pollRunningTasks(
   getTasksArray: () => BackgroundTask[],
   getTaskMessages?: (
     sessionID: string
-  ) => Promise<Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }>>
+  ) => Promise<
+    Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }>
+  >,
+  persistTask?: (task: BackgroundTask) => void
 ): Promise<void> {
   try {
     const statusResult = await client.session.status();
@@ -99,6 +103,13 @@ export async function pollRunningTasks(
       // Handle both running and resumed tasks
       if (task.status !== "running" && task.status !== "resumed") continue;
 
+      // For resumed tasks, skip polling-based completion detection entirely.
+      // The sendResumePromptAsync handler manages completion and notification for resumes.
+      if (task.status === "resumed") {
+        await updateTaskProgress(task);
+        continue;
+      }
+
       const sessionStatus = allStatuses[task.sessionID];
 
       if (!sessionStatus) {
@@ -114,8 +125,7 @@ export async function pollRunningTasks(
             );
 
             if (hasAssistantResponse) {
-              task.status = "completed";
-              task.completedAt = new Date().toISOString();
+              setTaskStatus(task, "completed", { persistFn: persistTask });
               notifyParentSession(task);
               continue;
             }
@@ -128,8 +138,7 @@ export async function pollRunningTasks(
       }
 
       if (sessionStatus.type === "idle") {
-        task.status = "completed";
-        task.completedAt = new Date().toISOString();
+        setTaskStatus(task, "completed", { persistFn: persistTask });
         notifyParentSession(task);
         continue;
       }

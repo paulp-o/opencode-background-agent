@@ -34,7 +34,6 @@ export async function launchTask(
   const batchId = getOrCreateBatchId();
 
   const task: BackgroundTask = {
-    id: `bg_${crypto.randomUUID().slice(0, 8)}`,
     sessionID,
     parentSessionID: input.parentSessionID,
     parentMessageID: input.parentMessageID,
@@ -56,7 +55,7 @@ export async function launchTask(
   // Track original parent session to detect session changes
   setOriginalParentSessionID(input.parentSessionID);
 
-  tasks.set(task.id, task);
+  tasks.set(task.sessionID, task);
   startPolling();
 
   client.session
@@ -75,7 +74,7 @@ export async function launchTask(
       },
     })
     .catch((error) => {
-      const existingTask = tasks.get(task.id);
+      const existingTask = tasks.get(task.sessionID);
       if (existingTask) {
         existingTask.status = "error";
         const errorMessage = error instanceof Error ? error.message : String(error);

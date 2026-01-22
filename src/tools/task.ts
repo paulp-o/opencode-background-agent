@@ -1,4 +1,5 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
+import { shortId } from "../helpers";
 import type { BackgroundTask, LaunchInput } from "../types";
 import { type ResumeManager, executeResume, validateResumeTask } from "./resume";
 
@@ -91,8 +92,8 @@ async function handleResumeMode(
     warnings.push("Note: agent and description are ignored in resume mode.");
   }
 
-  // Validate the task can be resumed
-  const validation = validateResumeTask(manager, taskId);
+  // Validate the task can be resumed (async - checks disk if not in memory)
+  const validation = await validateResumeTask(manager, taskId);
   if (!validation.valid) {
     return validation.error;
   }
@@ -138,10 +139,9 @@ async function handleLaunchMode(
     });
 
     return `⏳ **Background task launched**
-Task ID: \`${task.id}\`
-Session ID: \`${task.sessionID}\`
+Task ID: \`${shortId(task.sessionID)}\`
 
-Task will run in background. You'll be notified when complete. Use \`background_output\` with task_id=\`${task.id}\` to get results.`;
+Task will run in background. You'll be notified when complete.`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return `Failed to launch background task: ${message}`;

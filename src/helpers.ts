@@ -4,6 +4,50 @@ import type { BackgroundTask, BackgroundTaskStatus } from "./types";
 // Helper Functions
 // =============================================================================
 
+/**
+ * Centralized task status setter. Always use this to change task status.
+ * - Sets task.status
+ * - Sets task.completedAt for terminal statuses
+ * - Optionally sets task.error
+ * - Auto-persists if persistFn is provided
+ */
+export function setTaskStatus(
+  task: BackgroundTask,
+  status: BackgroundTaskStatus,
+  options?: {
+    error?: string;
+    persistFn?: (task: BackgroundTask) => void;
+  }
+): void {
+  task.status = status;
+
+  // Set completedAt for terminal statuses
+  if (status === "completed" || status === "error" || status === "cancelled") {
+    task.completedAt = new Date().toISOString();
+  }
+
+  // Set error message if provided
+  if (options?.error) {
+    task.error = options.error;
+  }
+
+  // Auto-persist if function provided
+  options?.persistFn?.(task);
+}
+
+/**
+ * Converts a full session ID to a short display ID (GitHub-style).
+ * Example: ses_41e080918ffeyhQtX6E4vERe4O → ses_41e08091
+ */
+export function shortId(sessionId: string): string {
+  if (!sessionId.startsWith("ses_")) {
+    // Fallback for non-standard IDs: just take first 12 chars
+    return sessionId.slice(0, 12);
+  }
+  const suffix = sessionId.slice(4); // Remove "ses_"
+  return `ses_${suffix.slice(0, 8)}`;
+}
+
 export function formatDuration(startStr: string, endStr?: string): string {
   const start = new Date(startStr);
   const end = endStr ? new Date(endStr) : new Date();
@@ -64,12 +108,11 @@ export function formatTaskStatus(task: BackgroundTask): string {
 
 | Field | Value |
 |-------|-------|
-| Task ID | \`${task.id}\` |
+| Task ID | \`${shortId(task.sessionID)}\` |
 | Description | ${task.description} |
 | Agent | ${task.agent} |
 | Status | ${icon} **${task.status}** |
-| Duration | ${duration} |
-| Session ID | \`${task.sessionID}\` |${progressSection}
+| Duration | ${duration} |${progressSection}
 ${statusNote}
 ## Original Prompt
 
@@ -96,10 +139,9 @@ export async function formatTaskResult(
 
 | Field | Value |
 |-------|-------|
-| Task ID | \`${task.id}\` |
+| Task ID | \`${shortId(task.sessionID)}\` |
 | Description | ${task.description} |
 | Duration | ${formatDuration(task.startedAt, task.completedAt)} |
-| Session ID | \`${task.sessionID}\` |
 
 ---
 
@@ -113,10 +155,9 @@ export async function formatTaskResult(
 
 | Field | Value |
 |-------|-------|
-| Task ID | \`${task.id}\` |
+| Task ID | \`${shortId(task.sessionID)}\` |
 | Description | ${task.description} |
 | Duration | ${formatDuration(task.startedAt, task.completedAt)} |
-| Session ID | \`${task.sessionID}\` |
 
 ---
 
@@ -134,10 +175,9 @@ export async function formatTaskResult(
 
 | Field | Value |
 |-------|-------|
-| Task ID | \`${task.id}\` |
+| Task ID | \`${shortId(task.sessionID)}\` |
 | Description | ${task.description} |
 | Duration | ${formatDuration(task.startedAt, task.completedAt)} |
-| Session ID | \`${task.sessionID}\` |
 
 ---
 
@@ -146,10 +186,9 @@ ${textContent || "(No text output)"}`;
     const errMsg = error instanceof Error ? error.message : String(error);
     return `Task Result
 
-Task ID: ${task.id}
+Task ID: ${shortId(task.sessionID)}
 Description: ${task.description}
 Duration: ${formatDuration(task.startedAt, task.completedAt)}
-Session ID: ${task.sessionID}
 
 ---
 

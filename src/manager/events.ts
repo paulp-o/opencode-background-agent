@@ -1,3 +1,4 @@
+import { setTaskStatus } from "../helpers";
 import type { BackgroundTask } from "../types";
 
 // =============================================================================
@@ -48,25 +49,35 @@ export function handleEvent(
     clearAllTasks: () => void;
     getTasksArray: () => BackgroundTask[];
     notifyParentSession: (task: BackgroundTask) => void;
+    persistTask: (task: BackgroundTask) => void;
   }
 ): void {
-  const { clearAllTasks, getTasksArray, notifyParentSession } = callbacks;
+  const { clearAllTasks, getTasksArray, notifyParentSession, persistTask } = callbacks;
   const props = event.properties;
 
   // Debug: log all events to understand what's being received
   // console.log("[background-agent] Event received:", event.type, JSON.stringify(props));
 
-  // Clear on session.new, prompt.clear, or session.interrupt (ESC key)
+  // Clear on session.new, session.switch, prompt.clear, or session.interrupt (ESC key)
   if (event.type === "tui.command.execute") {
     const command = props?.command as string | undefined;
     if (
       command === "session.new" ||
+      command === "session.switch" ||
+      command === "session.select" ||
       command === "prompt.clear" ||
       command === "session.interrupt"
     ) {
       clearAllTasks();
       return;
     }
+  }
+
+  // Also clear if a new session is created via event
+  if (event.type === "session.created") {
+    // New session created, clear old tasks from memory
+    clearAllTasks();
+    return;
   }
 
   // Clear if parent session is deleted
@@ -86,9 +97,10 @@ export function handleEvent(
     if (!task) return;
 
     if (task.status === "running") {
-      task.status = "cancelled";
-      task.completedAt = new Date().toISOString();
-      task.error = "Session deleted";
+      setTaskStatus(task, "cancelled", {
+        error: "Session deleted",
+        persistFn: persistTask,
+      });
     }
     return;
   }
@@ -98,26 +110,21 @@ export function handleEvent(
     if (!sessionID) return;
 
     const task = getTasksArray().find((t) => t.sessionID === sessionID);
-    // Handle both running tasks and resumed tasks
-    if (!task || (task.status !== "running" && task.status !== "resumed")) return;
-
-    task.status = "completed";
-    task.completedAt = new Date().toISOString();
-    // Trigger notification immediately on event-based completion
-    notifyParentSession(task);
-  }
-
-  if (event.type === "session.deleted") {
-    const info = props?.info as { id?: string } | undefined;
-    if (!info?.id) return;
-
-    const task = getTasksArray().find((t) => t.sessionID === info.id);
     if (!task) return;
 
-    if (task.status === "running") {
-      task.status = "cancelled";
-      task.completedAt = new Date().toISOString();
-      task.error = "Session deleted";
+    // For resumed tasks, do NOT send notifyParentSession - the resume handler
+    // (sendResumePromptAsync) will send notifyResumeComplete instead
+    if (task.status === "resumed") {
+      // Just mark as completed, the resume async handler will detect this
+      // and send the appropriate resume notification
+      return;
     }
+
+    // Only handle running tasks (not resumed)
+    if (task.status !== "running") return;
+
+    setTaskStatus(task, "completed", { persistFn: persistTask });
+    // Trigger notification immediately on event-based completion
+    notifyParentSession(task);
   }
 }

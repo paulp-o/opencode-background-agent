@@ -1,5 +1,5 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
-import { formatDuration, getStatusIcon } from "../helpers";
+import { formatDuration, getStatusIcon, shortId } from "../helpers";
 import type { BackgroundTask } from "../types";
 
 // =============================================================================
@@ -48,7 +48,7 @@ Arguments:
                 ? `${task.description.slice(0, 27)}...`
                 : task.description;
             const icon = getStatusIcon(task.status);
-            return `| \`${task.id}${task.resumeCount > 0 ? " (resumed)" : ""}\` | ${desc} | ${task.agent} | ${icon} ${task.status} | ${duration} |`;
+            return `| \`${shortId(task.sessionID)}${task.resumeCount > 0 ? " (resumed)" : ""}\` | ${desc} | ${task.agent} | ${icon} ${task.status} | ${duration} |`;
           })
           .join("\n");
 

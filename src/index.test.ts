@@ -5,10 +5,10 @@ const createMockContext = (overrides = {}) => ({
   client: {
     event: { subscribe: async () => ({ stream: [] }) },
     session: {
-      create: async () => ({ data: { id: "test-session" } }),
+      create: async () => ({ data: { id: "ses_test123" } }),
       status: async () => ({ data: {} }),
       messages: async () => ({ data: [] }),
-      get: async () => ({ data: { id: "test-session" } }),
+      get: async () => ({ data: { id: "ses_test123" } }),
       abort: async () => ({}),
       prompt: async () => ({}),
       promptAsync: async () => ({}),
@@ -16,6 +16,10 @@ const createMockContext = (overrides = {}) => ({
     ...overrides,
   },
   directory: "/test",
+  project: "test-project",
+  worktree: "/test",
+  serverUrl: "http://localhost",
+  $: {},
 });
 
 describe("Background Agent Plugin", () => {
@@ -24,23 +28,8 @@ describe("Background Agent Plugin", () => {
   });
 
   test("should return an object with tool property when called", async () => {
-    const mockContext = {
-      client: {
-        event: { subscribe: async () => ({ stream: [] }) },
-        session: {
-          create: async () => ({ data: { id: "test" } }),
-          status: async () => ({ data: {} }),
-          messages: async () => ({ data: [] }),
-          get: async () => ({ data: {} }),
-          abort: async () => ({}),
-          prompt: async () => ({}),
-          promptAsync: async () => ({}),
-        },
-      },
-      directory: "/test",
-    };
-
-    const result = await plugin(mockContext);
+    const mockContext = createMockContext();
+    const result = await plugin(mockContext as any);
 
     expect(result).toBeObject();
     expect(result).toHaveProperty("tool");
@@ -48,208 +37,103 @@ describe("Background Agent Plugin", () => {
   });
 
   test("should export all expected tools", async () => {
-    const mockContext = {
-      client: {
-        event: { subscribe: async () => ({ stream: [] }) },
-        session: {
-          create: async () => ({ data: { id: "test" } }),
-          status: async () => ({ data: {} }),
-          messages: async () => ({ data: [] }),
-          get: async () => ({ data: {} }),
-          abort: async () => ({}),
-          prompt: async () => ({}),
-          promptAsync: async () => ({}),
-        },
-      },
-      directory: "/test",
-    };
+    const mockContext = createMockContext();
+    const result = await plugin(mockContext as any);
 
-    const result = await plugin(mockContext);
-
+    // Core tools that exist in current implementation
     expect(result.tool).toHaveProperty("background_task");
     expect(result.tool).toHaveProperty("background_output");
-    expect(result.tool).toHaveProperty("background_block");
     expect(result.tool).toHaveProperty("background_cancel");
-    expect(result.tool).toHaveProperty("background_resume");
     expect(result.tool).toHaveProperty("background_list");
     expect(result.tool).toHaveProperty("background_clear");
   });
 
   test("should return an object with event property", async () => {
-    const mockContext = {
-      client: {
-        event: { subscribe: async () => ({ stream: [] }) },
-        session: {
-          create: async () => ({ data: { id: "test" } }),
-          status: async () => ({ data: {} }),
-          messages: async () => ({ data: [] }),
-          get: async () => ({ data: {} }),
-          abort: async () => ({}),
-          prompt: async () => ({}),
-          promptAsync: async () => ({}),
-        },
-      },
-      directory: "/test",
-    };
-
-    const result = await plugin(mockContext);
+    const mockContext = createMockContext();
+    const result = await plugin(mockContext as any);
 
     expect(result).toHaveProperty("event");
     expect(result.event).toBeInstanceOf(Function);
   });
 });
 
-describe("background_resume tool", () => {
-  test("should return error when task not found", async () => {
+describe("background_task tool", () => {
+  test("should return error when agent is missing", async () => {
     const mockContext = createMockContext();
-    const result = await plugin(mockContext);
-    const resumeTool = result.tool.background_resume;
+    const result = await plugin(mockContext as any);
+    const taskTool = result.tool!.background_task;
 
-    const output = await resumeTool.execute(
-      { task_id: "nonexistent", message: "follow up" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
+    const output = await taskTool.execute({ description: "test", prompt: "test", agent: "" }, {
+      sessionID: "parent",
+      messageID: "msg",
+      agent: "test",
+    } as any);
+
+    expect(output).toContain("Agent parameter is required");
+  });
+
+  test("should launch task with valid parameters", async () => {
+    const mockContext = createMockContext();
+    const result = await plugin(mockContext as any);
+    const taskTool = result.tool!.background_task;
+
+    const output = await taskTool.execute(
+      { description: "test task", prompt: "do something", agent: "explore" },
+      { sessionID: "parent", messageID: "msg", agent: "test" } as any
+    );
+
+    expect(output).toContain("Background task launched");
+    // Task ID is now session ID format (ses_*)
+    expect(output).toContain("Task ID:");
+  });
+
+  test("should support resume mode via resume parameter", async () => {
+    const mockContext = createMockContext();
+    const result = await plugin(mockContext as any);
+    const taskTool = result.tool!.background_task;
+
+    // Try to resume a non-existent task
+    const output = await taskTool.execute(
+      { resume: "ses_nonexistent", description: "", prompt: "follow up", agent: "" },
+      { sessionID: "parent", messageID: "msg", agent: "test" } as any
     );
 
     expect(output).toContain("Task not found");
   });
+});
 
-  test("should return error when resuming non-completed task", async () => {
+describe("background_output tool", () => {
+  test("should return error when task not found", async () => {
     const mockContext = createMockContext();
-    const result = await plugin(mockContext);
-    const taskTool = result.tool.background_task;
-    const resumeTool = result.tool.background_resume;
+    const result = await plugin(mockContext as any);
+    const outputTool = result.tool!.background_output;
 
-    const launchOutput = await taskTool.execute(
-      { description: "test task", prompt: "do something", agent: "explore" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
+    const output = await outputTool.execute({ task_id: "ses_nonexistent" }, {} as any);
 
-    const taskIdMatch = launchOutput.match(/Task ID: `(bg_[a-f0-9]+)`/);
-    expect(taskIdMatch).toBeTruthy();
-    const taskId = taskIdMatch![1];
-
-    const resumeOutput = await resumeTool.execute(
-      { task_id: taskId, message: "follow up" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-
-    expect(resumeOutput).toContain("Cannot resume task");
-    expect(resumeOutput).toContain("running");
+    expect(output).toContain("Task not found");
   });
+});
 
-  test("should return error for concurrent resume attempts", async () => {
-    let statusCallCount = 0;
+describe("background_list tool", () => {
+  test("should return empty message when no tasks", async () => {
     const mockContext = createMockContext();
-    mockContext.client.session.status = async () => {
-      statusCallCount++;
-      if (statusCallCount === 1) {
-        return { data: { "test-session": { type: "idle" } } };
-      }
-      return { data: { "test-session": { type: "busy" } } };
-    };
-    mockContext.client.session.messages = async () => ({
-      data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "done" }] }],
-    });
+    const result = await plugin(mockContext as any);
+    const listTool = result.tool!.background_list;
 
-    const result = await plugin(mockContext);
-    const taskTool = result.tool.background_task;
-    const resumeTool = result.tool.background_resume;
+    const output = await listTool.execute({}, {} as any);
 
-    const launchOutput = await taskTool.execute(
-      { description: "test task", prompt: "do something", agent: "explore" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-
-    const taskIdMatch = launchOutput.match(/Task ID: `(bg_[a-f0-9]+)`/);
-    const taskId = taskIdMatch![1];
-
-    await new Promise((r) => setTimeout(r, 150));
-
-    // background_resume is now always non-blocking (notification-based)
-    const resumeOutput1 = await resumeTool.execute(
-      { task_id: taskId, message: "follow up 1" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-    expect(resumeOutput1).toContain("Resume initiated");
-
-    const resumeOutput2 = await resumeTool.execute(
-      { task_id: taskId, message: "follow up 2" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-    expect(resumeOutput2).toContain("currently being resumed");
+    expect(output).toContain("No background tasks found");
   });
+});
 
-  test("should return error when session expired", async () => {
+describe("background_clear tool", () => {
+  test("should return message when no tasks to clear", async () => {
     const mockContext = createMockContext();
-    mockContext.client.session.status = async () => ({
-      data: { "test-session": { type: "idle" } },
-    });
-    mockContext.client.session.get = async () => ({ error: "not found", data: null });
-    mockContext.client.session.messages = async () => ({
-      data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "done" }] }],
-    });
+    const result = await plugin(mockContext as any);
+    const clearTool = result.tool!.background_clear;
 
-    const result = await plugin(mockContext);
-    const taskTool = result.tool.background_task;
-    const resumeTool = result.tool.background_resume;
+    const output = await clearTool.execute({}, {} as any);
 
-    const launchOutput = await taskTool.execute(
-      { description: "test task", prompt: "do something", agent: "explore" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-
-    const taskIdMatch = launchOutput.match(/Task ID: `(bg_[a-f0-9]+)`/);
-    const taskId = taskIdMatch![1];
-
-    await new Promise((r) => setTimeout(r, 150));
-
-    const resumeOutput = await resumeTool.execute(
-      { task_id: taskId, message: "follow up" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-
-    expect(resumeOutput).toContain("Session expired");
-  });
-
-  test("should increment resumeCount on resume initiation", async () => {
-    const mockContext = createMockContext();
-    mockContext.client.session.status = async () => ({
-      data: { "test-session": { type: "idle" } },
-    });
-    mockContext.client.session.promptAsync = async () => ({});
-    mockContext.client.session.messages = async () => ({
-      data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "response" }] }],
-    });
-
-    const result = await plugin(mockContext);
-    const taskTool = result.tool.background_task;
-    const resumeTool = result.tool.background_resume;
-
-    const launchOutput = await taskTool.execute(
-      { description: "test task", prompt: "do something", agent: "explore" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-
-    const taskIdMatch = launchOutput.match(/Task ID: `(bg_[a-f0-9]+)`/);
-    const taskId = taskIdMatch![1];
-
-    await new Promise((r) => setTimeout(r, 150));
-
-    // background_resume is now always non-blocking (notification-based)
-    // Each resume initiation increments the count
-    const resumeOutput1 = await resumeTool.execute(
-      { task_id: taskId, message: "first follow up" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-    expect(resumeOutput1).toContain("Resume count: 1");
-
-    // Wait for the resume to complete before trying another
-    await new Promise((r) => setTimeout(r, 200));
-
-    const resumeOutput2 = await resumeTool.execute(
-      { task_id: taskId, message: "second follow up" },
-      { sessionID: "parent", messageID: "msg", agent: "test" }
-    );
-    expect(resumeOutput2).toContain("Resume count: 2");
+    expect(output).toContain("No background tasks to clear");
   });
 });

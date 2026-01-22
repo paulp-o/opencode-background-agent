@@ -1,4 +1,5 @@
 import { COMPLETION_DISPLAY_DURATION, SPINNER_FRAMES } from "../constants";
+import { shortId } from "../helpers";
 import type { BackgroundTask, OpencodeClient } from "../types";
 
 // =============================================================================
@@ -49,7 +50,8 @@ export function showProgressToast(
   const totalToolCalls = batchTasks.reduce((sum, t) => sum + (t.progress?.toolCalls ?? 0), 0);
 
   const taskLines: string[] = [];
-  const shortId = (id: string) => id.slice(-8);
+  // Use local shortId for toast (last 8 chars) - different from helpers.shortId which preserves ses_ prefix
+  const toastShortId = (id: string) => id.slice(-8);
 
   const batchRunning = runningTasks.filter((t) => t.batchId === activeBatchId);
   for (const task of batchRunning) {
@@ -63,7 +65,7 @@ export function showProgressToast(
         prevTools.length > 0 ? ` - ${prevTools.join(" > ")} > ｢${lastTool}｣` : ` - ｢${lastTool}｣`;
     }
     taskLines.push(
-      `${spinner} [${shortId(task.id)}] ${task.agent}: ${task.description} (${duration})${toolsStr}`
+      `${spinner} [${toastShortId(task.sessionID)}] ${task.agent}: ${task.description} (${duration})${toolsStr}`
     );
   }
 
@@ -85,7 +87,7 @@ export function showProgressToast(
     );
     const icon = task.status === "completed" ? "✓" : task.status === "error" ? "✗" : "⊘";
     taskLines.push(
-      `${icon} [${shortId(task.id)}] ${task.agent}: ${task.description} (${duration})`
+      `${icon} [${toastShortId(task.sessionID)}] ${task.agent}: ${task.description} (${duration})`
     );
   }
 
@@ -107,7 +109,7 @@ export function showProgressToast(
   if (!tuiClient.tui?.showToast) return;
 
   const hasRunning = runningTasks.filter((t) => t.batchId === activeBatchId).length > 0;
-  const title = hasRunning ? `${spinner} Background Tasks` : "✓ Background Tasks Complete";
+  const title = hasRunning ? `${spinner} Background Tasks` : "✓ Tasks complete";
   const variant = hasRunning ? "info" : "success";
 
   tuiClient.tui
@@ -149,10 +151,16 @@ export function notifyParentSession(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tuiClient = client as any;
   if (tuiClient.tui?.showToast) {
+    const toastTitle =
+      task.status === "completed"
+        ? "✓ Task completed"
+        : task.status === "error"
+          ? "✗ Task failed"
+          : "⊘ Task cancelled";
     tuiClient.tui
       .showToast({
         body: {
-          title: `Background Task ${statusText}`,
+          title: toastTitle,
           message: `Task "${task.description}" finished in ${duration}. Batch: ${completedTasks}/${totalTasks} complete, ${runningTasks} still running.`,
           variant: task.status === "completed" ? "success" : "error",
           duration: 5000,
@@ -165,7 +173,17 @@ export function notifyParentSession(
     runningTasks > 0
       ? "WATCH OUT for leftover tasks, you will likely WANT to wait for all tasks to complete."
       : "";
-  const message = `[BACKGROUND TASK ${statusText}] Task "${task.description}" finished in ${duration}. Batch progress: ${completedTasks}/${totalTasks} tasks complete, ${runningTasks} still running. If you need results immediately, use background_output(task_id="${task.id}"). Otherwise, continue working or just say 'waiting' and halt.${leftoverWarning ? ` ${leftoverWarning}` : ""}`;
+  const taskStatusHeader =
+    task.status === "completed"
+      ? "✓ **Background task completed**"
+      : task.status === "error"
+        ? "✗ **Background task failed**"
+        : "⊘ **Background task cancelled**";
+  const message = `${taskStatusHeader}
+Task "${task.description}" finished in ${duration}.
+Batch progress: ${completedTasks}/${totalTasks} tasks complete, ${runningTasks} still running.
+If you need results immediately, use background_output(task_id="${shortId(task.sessionID)}").
+Otherwise, continue working or just say 'waiting' and halt.${leftoverWarning ? ` ${leftoverWarning}` : ""}`;
 
   setTimeout(async () => {
     try {
@@ -203,21 +221,12 @@ export async function notifyResumeComplete(
   ) => Promise<Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }>>
 ): Promise<void> {
   try {
-    const messages = await getTaskMessages(task.sessionID);
-    const assistantMessages = messages.filter((m) => m.info?.role === "assistant");
-    let responsePreview = "(No response)";
-
-    if (assistantMessages.length > 0) {
-      const lastMessage = assistantMessages[assistantMessages.length - 1];
-      const textParts = lastMessage?.parts?.filter((p) => p.type === "text") ?? [];
-      const textContent = textParts
-        .map((p) => p.text ?? "")
-        .filter((text) => text.length > 0)
-        .join("\n");
-      responsePreview = textContent.slice(0, 500) + (textContent.length > 500 ? "..." : "");
-    }
-
-    const notification = `[BACKGROUND RESUME COMPLETED] Task "${task.description}" resume #${task.resumeCount} finished. Use background_output(task_id="${task.id}") for full response.\n\nPreview:\n${responsePreview}`;
+    const resumeHeader =
+      task.resumeCount > 1
+        ? `✓ **Resume #${task.resumeCount} completed**`
+        : "✓ **Resume completed**";
+    const notification = `${resumeHeader}
+Task "${task.description}" finished. Use background_output(task_id="${shortId(task.sessionID)}") for full response.`;
 
     await client.session.prompt({
       path: { id: toolContext.sessionID },
@@ -243,7 +252,11 @@ export async function notifyResumeError(
   toolContext: { sessionID: string; agent: string }
 ): Promise<void> {
   try {
-    const notification = `[BACKGROUND RESUME FAILED] Task "${task.description}" resume #${task.resumeCount} failed: ${errorMessage}`;
+    const resumeHeader =
+      task.resumeCount > 1 ? `✗ **Resume #${task.resumeCount} failed**` : "✗ **Resume failed**";
+    const notification = `${resumeHeader}
+Task "${task.description}" failed: ${errorMessage}
+Use background_output(task_id="${shortId(task.sessionID)}") for more details.`;
 
     await client.session.prompt({
       path: { id: toolContext.sessionID },
