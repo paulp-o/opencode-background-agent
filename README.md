@@ -27,7 +27,7 @@ Add the plugin to your `opencode.json(c)`:
 
 ## Tools Provided
 
-- **`background_task(description: string, prompt: string, agent: string)`**: Launch async background agent tasks
+- **`background_task(description: string, prompt: string, agent: string, fork: boolean)`**: Launch async background agent tasks (fork: boolean - fork parent context to child session)
 - **`background_output(task_id: string, block: boolean, timeout?: number)`**: Get task results (blocking/non-blocking)
 - **`background_cancel(task_id: string)`**: Cancel running tasks
 - **`background_resume(task_id: string, message: string, block?: boolean, timeout?: number)`**: Resume a completed task with a follow-up message for multi-turn conversations

@@ -53,7 +53,9 @@ export class BackgroundManager {
       // Note: We don't load into memory on startup to keep memory lean.
       // Tasks are loaded lazily via getTask() when needed.
       // This just validates the file is readable.
-      console.log(`[opencode-background-task MANAGER] Loaded ${Object.keys(persisted).length} persisted tasks from disk`);
+      console.log(
+        `[opencode-background-task MANAGER] Loaded ${Object.keys(persisted).length} persisted tasks from disk`
+      );
     } catch {
       // Ignore load errors - file may not exist yet
     }
@@ -94,6 +96,7 @@ export class BackgroundManager {
       createdAt: task.startedAt,
       status: task.status,
       resumeCount: task.resumeCount,
+      isForked: task.isForked,
     };
     try {
       await saveTask(task.sessionID, persisted);
@@ -254,6 +257,7 @@ export class BackgroundManager {
           startedAt: persisted.createdAt,
           batchId: "", // Not persisted
           resumeCount: persisted.resumeCount ?? 0,
+          isForked: persisted.isForked ?? false,
         };
         // Add to memory cache
         this.tasks.set(id, task);

@@ -25,7 +25,7 @@ The system SHALL allow retrieval of task results after completion, with tasks pe
 
 #### Scenario: Blocking with default timeout
 - **WHEN** user calls `background_output` with block=true but no timeout
-- **THEN** system uses default timeout of 30 seconds
+- **THEN** system uses default timeout of 120 seconds
 - **AND** maximum allowed timeout is 600 seconds (10 minutes)
 
 #### Scenario: Timeout ignored when not blocking

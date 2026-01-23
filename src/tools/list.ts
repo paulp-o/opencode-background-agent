@@ -15,9 +15,16 @@ export function createBackgroundList(manager: {
     args: {
       status: tool.schema.string().optional().describe("Filter by status"),
     },
-    async execute(args: { status?: string }) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async execute(args: { status?: string }, toolContext: any) {
       try {
         let tasks = manager.getAllTasks();
+
+        // Filter to only show tasks that are children of the current session
+        const currentSessionID = toolContext?.sessionID;
+        if (currentSessionID) {
+          tasks = tasks.filter((t) => t.parentSessionID === currentSessionID);
+        }
 
         if (args.status) {
           tasks = tasks.filter((t) => t.status === args.status?.toLowerCase());
@@ -41,7 +48,16 @@ export function createBackgroundList(manager: {
                 ? `${task.description.slice(0, 27)}...`
                 : task.description;
             const icon = getStatusIcon(task.status);
-            return `| \`${shortId(task.sessionID)}${task.resumeCount > 0 ? " (resumed)" : ""}\` | ${desc} | ${task.agent} | ${icon} ${task.status} | ${duration} |`;
+            const indicators = [
+              task.isForked ? "(forked)" : "",
+              task.resumeCount > 0 ? "(resumed)" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+            const idWithIndicators = indicators
+              ? `${shortId(task.sessionID)} ${indicators}`
+              : shortId(task.sessionID);
+            return `| \`${idWithIndicators}\` | ${desc} | ${task.agent} | ${icon} ${task.status} | ${duration} |`;
           })
           .join("\n");
 

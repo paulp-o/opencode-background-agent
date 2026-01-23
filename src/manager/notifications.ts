@@ -19,7 +19,7 @@ export function showProgressToast(
   if (allTasks.length === 0) return;
 
   const now = Date.now();
-  const runningTasks = allTasks.filter((t) => t.status === "running");
+  const runningTasks = allTasks.filter((t) => t.status === "running" || t.status === "resumed");
   const completedTasks = allTasks.filter(
     (t) => t.status === "completed" || t.status === "error" || t.status === "cancelled"
   );

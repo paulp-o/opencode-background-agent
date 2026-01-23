@@ -80,6 +80,7 @@
     ]
   },
   "dependencies": {
+    "@anthropic-ai/tokenizer": "^0.0.4",
     "zod": "^4.3.5"
   }
 }

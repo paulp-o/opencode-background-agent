@@ -10,7 +10,7 @@
 // =============================================================================
 
 export const TOOL_DESCRIPTIONS = {
-  backgroundTask: `Launch a background agent task that runs asynchronously.
+  backgroundTask: `Launch a background agent task that runs asynchronously with clear context.
 
 The task runs in a separate session while you continue with other work.
 
@@ -20,12 +20,13 @@ Use this for:
 - Parallel workloads to maximize throughput
 
 Arguments:
-- resume: (Optional) Task ID to resume - if provided, enters resume mode
+- resume: (Optional) Task ID to resume - if provided, enters resume mode. You can send follow-up prompts for continuous feedback.
+- fork: (Optional) If true, fork parent context to child session (child inherits conversation history of caller agent). MUST provide the expected response to it.
 - description: Short task description (shown in status)
 - prompt: Full detailed prompt for the agent (or follow-up message in resume mode)
 - agent: Agent type to use (any registered agent)
 
-IMPORTANT: You'll be informed when each task is complete.DO NOT assume all tasks were done, check again if all agents you need are complete.
+IMPORTANT: You'll be informed when each task is complete. DO NOT assume all tasks were done, check again if all agents you need are complete.
 
 Returns immediately with task ID. The task will run in background and notify you when complete.
 Optionally use \`background_output\` later if you need to check results manually with or without blocking.`,
@@ -49,7 +50,7 @@ Arguments:
 Arguments:
 - task_id: Required task ID to get output from
 - block: Optional boolean to wait for task completion (default: false)
-- timeout: Optional timeout in seconds when blocking (default: 30, max: 600)
+- timeout: Optional timeout in seconds when blocking (default: 120, max: 600)
 
 Returns:
 - Current status and result (if completed)
@@ -70,7 +71,7 @@ export const SUCCESS_MESSAGES = {
   taskLaunched: (shortTaskId: string) => `⏳ **Background task launched**
 Task ID: \`${shortTaskId}\`
 
-Task will run in background. You'll be notified when complete.`,
+You can continue working or say 'waiting' and halt.`,
 
   taskCancelled: (shortTaskId: string, description: string) => `⊘ **Task cancelled**
 
@@ -83,7 +84,7 @@ Status: ⊘ cancelled`,
     return `⏳ **Resume initiated**
 Task ID: \`${shortTaskId}\`${resumeCountInfo}
 
-Follow-up prompt sent. You'll be notified when the response is ready.`;
+Follow-up prompt sent. You can continue working or say 'waiting' and halt.`;
   },
 
   clearedAllTasks: (runningCount: number, totalCount: number) => `✓ **Cleared all background tasks**
@@ -139,6 +140,19 @@ export const ERROR_MESSAGES = {
 
 export const WARNING_MESSAGES = {
   resumeModeIgnoresParams: "Note: agent and description are ignored in resume mode.",
+};
+
+// =============================================================================
+// Fork Messages
+// =============================================================================
+
+export const FORK_MESSAGES = {
+  forkResumeConflict:
+    "Cannot use fork and resume together. Use fork for new tasks with context, resume for continuing existing tasks.",
+
+  preamble: `You are working with forked context from a parent agent session.
+Note: Some older tool results may have been truncated to save tokens.
+If you need complete file contents or detailed results, re-read the files directly.`,
 };
 
 // =============================================================================
@@ -201,7 +215,7 @@ export const TOAST_TITLES = {
   backgroundTasksRunning: (spinner: string) => {
     const prefix = process.env.OPENCODE_BGAGENT_PREFIX;
     const baseText = "Background Agents";
-    return prefix ? `${spinner} ${prefix} ${baseText}` : `${spinner} ${baseText}`;
+    return prefix ? `⛭ ${prefix} ${baseText}` : `⛭ ${baseText}`;
   },
   tasksComplete: "✓ Tasks complete",
 };

@@ -1,6 +1,12 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
 import { shortId } from "../helpers";
-import { ERROR_MESSAGES, SUCCESS_MESSAGES, TOOL_DESCRIPTIONS, WARNING_MESSAGES } from "../prompts";
+import {
+  ERROR_MESSAGES,
+  FORK_MESSAGES,
+  SUCCESS_MESSAGES,
+  TOOL_DESCRIPTIONS,
+  WARNING_MESSAGES,
+} from "../prompts";
 import type { BackgroundTask, LaunchInput } from "../types";
 import { type ResumeManager, executeResume, validateResumeTask } from "./resume";
 
@@ -27,14 +33,22 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
     description: TOOL_DESCRIPTIONS.backgroundTask,
     args: {
       resume: tool.schema.string().optional(),
+      fork: tool.schema.boolean().optional(),
       description: tool.schema.string().nonoptional(),
       prompt: tool.schema.string().nonoptional(),
       agent: tool.schema.string().nonoptional(),
     },
     async execute(
-      args: { resume?: string; description: string; prompt: string; agent: string },
+      args: { resume?: string; fork?: boolean; description: string; prompt: string; agent: string },
       toolContext
     ) {
+      // =======================================================================
+      // Validation: fork and resume are mutually exclusive
+      // =======================================================================
+      if (args.fork && args.resume) {
+        return FORK_MESSAGES.forkResumeConflict;
+      }
+
       // =======================================================================
       // Mode Detection: if resume is truthy, use resume mode
       // =======================================================================
@@ -43,7 +57,7 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
       }
 
       // =======================================================================
-      // Launch Mode: create a new background task
+      // Launch Mode: create a new background task (with optional fork)
       // =======================================================================
       return handleLaunchMode(manager, args, toolContext);
     },
@@ -102,11 +116,10 @@ async function handleResumeMode(
 
 async function handleLaunchMode(
   manager: TaskManager,
-  args: { resume?: string; description: string; prompt: string; agent: string },
+  args: { resume?: string; fork?: boolean; description: string; prompt: string; agent: string },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toolContext: any
 ): Promise<string> {
-  // Validate required params for launch mode
   if (!args.agent || args.agent.trim() === "") {
     return ERROR_MESSAGES.agentRequired;
   }
@@ -116,6 +129,7 @@ async function handleLaunchMode(
       description: args.description,
       prompt: args.prompt,
       agent: args.agent.trim(),
+      fork: args.fork,
       parentSessionID: toolContext.sessionID,
       parentMessageID: toolContext.messageID,
       parentAgent: toolContext.agent,

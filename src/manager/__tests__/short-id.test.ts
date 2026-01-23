@@ -63,6 +63,7 @@ const createMockTask = (
   startedAt,
   batchId: "batch_123",
   resumeCount: 0,
+  isForked: false,
   ...overrides,
 });
 

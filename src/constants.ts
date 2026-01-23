@@ -41,3 +41,13 @@ function getHomeDir(): string {
 const HOME_DIR = getHomeDir();
 export const STORAGE_DIR = `${HOME_DIR}/.opencode/plugins/background-agent`;
 export const TASKS_FILE = `${STORAGE_DIR}/tasks.json`;
+
+// =============================================================================
+// Fork Constants
+// =============================================================================
+
+/** Maximum tokens to include in forked context (leaves room for response) */
+export const FORK_MAX_TOKENS = 100000;
+
+/** Maximum characters per tool result before truncation */
+export const FORK_TOOL_RESULT_LIMIT = 1500;

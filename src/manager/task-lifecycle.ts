@@ -1,11 +1,14 @@
+import { type SessionMessage, formatMessagesAsContext, processMessagesForFork } from "../fork";
+import { FORK_MESSAGES } from "../prompts";
 import type { BackgroundTask, LaunchInput, OpencodeClient } from "../types";
 
 /**
- * Launch a new background task.
- *
- * Creates a new session for the task and starts it asynchronously.
- * The task is added to the tasks Map and polling is started.
+ * Fork implementation method:
+ * - "inject": session.create + context injection (recommended, UI works)
+ * - "native": session.fork API (UI visibility issues with subagent view)
  */
+const FORK_METHOD: "inject" | "native" = "inject";
+
 export async function launchTask(
   input: LaunchInput,
   tasks: Map<string, BackgroundTask>,
@@ -19,18 +22,82 @@ export async function launchTask(
     throw new Error("Agent parameter is required");
   }
 
-  const createResult = await client.session.create({
-    body: {
-      parentID: input.parentSessionID,
-      title: `Background: ${input.description}`,
-    },
-  });
+  let sessionID: string;
 
-  if (createResult.error) {
-    throw new Error(`Failed to create background session: ${createResult.error}`);
+  if (input.fork && FORK_METHOD === "native") {
+    // === NATIVE: Use session.fork API ===
+    const forkResult = await client.session.fork({
+      path: { id: input.parentSessionID },
+    });
+
+    if (forkResult.error || !forkResult.data) {
+      throw new Error(`Failed to fork session: ${forkResult.error ?? "No data returned"}`);
+    }
+
+    sessionID = forkResult.data.id;
+
+    // Try to set parentID for UI (may not work)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (client.session as any)
+      .update({
+        path: { id: sessionID },
+        body: {
+          parentID: input.parentSessionID,
+          title: `Background (forked): ${input.description}`,
+        },
+      })
+      .catch(() => {});
+
+    // Inject preamble
+    await client.session.prompt({
+      path: { id: sessionID },
+      body: { noReply: true, parts: [{ type: "text", text: FORK_MESSAGES.preamble }] },
+    });
+  } else {
+    // === INJECT (default): session.create + context injection ===
+    const createResult = await client.session.create({
+      body: {
+        parentID: input.parentSessionID,
+        title: input.fork
+          ? `Background (forked): ${input.description}`
+          : `Background: ${input.description}`,
+      },
+    });
+
+    if (createResult.error) {
+      throw new Error(`Failed to create background session: ${createResult.error}`);
+    }
+
+    sessionID = createResult.data.id;
+
+    // Fork mode: inject parent context
+    if (input.fork) {
+      try {
+        const messagesResult = await client.session.messages({
+          path: { id: input.parentSessionID },
+        });
+
+        if (!messagesResult.error && messagesResult.data) {
+          const parentMessages = messagesResult.data as SessionMessage[];
+
+          if (parentMessages.length > 0) {
+            const { messages: processedMessages } = processMessagesForFork(parentMessages);
+            const contextText = formatMessagesAsContext(processedMessages);
+
+            if (contextText) {
+              const contextWithPreamble = `${FORK_MESSAGES.preamble}\n\n${contextText}`;
+              await client.session.prompt({
+                path: { id: sessionID },
+                body: { noReply: true, parts: [{ type: "text", text: contextWithPreamble }] },
+              });
+            }
+          }
+        }
+      } catch {
+        // Continue without context if fetching fails
+      }
+    }
   }
-
-  const sessionID = createResult.data.id;
   const batchId = getOrCreateBatchId();
 
   const task: BackgroundTask = {
@@ -45,6 +112,7 @@ export async function launchTask(
     startedAt: new Date().toISOString(),
     batchId,
     resumeCount: 0,
+    isForked: input.fork ?? false,
     progress: {
       toolCalls: 0,
       lastTools: [],

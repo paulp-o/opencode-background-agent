@@ -73,7 +73,7 @@ getTask("ses_41e080918ffe")  // works (longer prefix)
 ⏳ **Background task launched**
 Task ID: `ses_41e08091`
 
-Task will run in background. You'll be notified when complete.
+You can continue working or say 'waiting' and halt.
 ```
 
 **Why**:
@@ -109,7 +109,7 @@ Task will run in background. You'll be notified when complete.
 ⏳ **Background task launched**
 Task ID: `ses_41e08091`
 
-Task will run in background. You'll be notified when complete.
+You can continue working or say 'waiting' and halt.
 ```
 
 ### Completion (injected message)

@@ -23,6 +23,7 @@ export interface PersistedTask {
   createdAt: string;
   status: BackgroundTaskStatus;
   resumeCount?: number;
+  isForked?: boolean;
 }
 
 /**
@@ -46,11 +47,14 @@ export interface BackgroundTask {
   progress?: TaskProgress;
   batchId: string;
   resumeCount: number;
+  isForked: boolean;
 }
 
 export interface LaunchInput {
   /** Task ID to resume (if provided, enters resume mode) */
   resume?: string;
+  /** Fork parent context to child session (creates session with inherited history) */
+  fork?: boolean;
   description: string;
   prompt: string;
   agent: string;

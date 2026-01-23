@@ -4,12 +4,27 @@
 TBD - created by archiving change define-project-specs. Update Purpose after archive.
 ## Requirements
 ### Requirement: Background Task Creation
-The system SHALL support launching background tasks that execute asynchronously without blocking the main conversation flow.
+
+The system SHALL support launching background tasks that execute asynchronously without blocking the main conversation flow. Tasks can be launched fresh, forked with context, or resumed from a completed task.
 
 #### Scenario: Launch background task
+
 - **WHEN** user requests a background task with description, prompt, and agent
 - **THEN** system creates a new task with unique ID and sets status to "running"
 - **AND** task includes parent session and message context for traceability
+
+#### Scenario: Launch forked background task
+
+- **WHEN** user requests a background task with `fork: true`
+- **THEN** system forks parent session using session.fork API
+- **AND** processes context (truncation, token limits)
+- **AND** creates task with `isForked: true`
+
+#### Scenario: Validate mutually exclusive modes
+
+- **WHEN** user provides both `fork: true` and `resume: taskId`
+- **THEN** system returns error explaining these modes are mutually exclusive
+- **AND** no task is created
 
 ### Requirement: Task Status Management
 The system SHALL maintain task status throughout the task lifecycle with five possible states: running, completed, error, cancelled, resumed.
@@ -124,15 +139,88 @@ The system SHALL use `session.idle` events as the primary mechanism for detectin
 - **AND** sends notification to parent session with full result
 
 ### Requirement: Task List Resume Indicator
-The system SHALL indicate in task listings when a task has been resumed, providing visual distinction for tasks with conversation history.
+
+The system SHALL indicate in task listings when a task has been resumed or forked, providing visual distinction for tasks with special context handling.
 
 #### Scenario: Show resumed indicator
+
 - **WHEN** user calls background_list
 - **AND** a task has resumeCount greater than 0
 - **THEN** system appends "(resumed)" after the task ID in the listing
 
-#### Scenario: No indicator for new tasks
+#### Scenario: Show forked indicator
+
 - **WHEN** user calls background_list
-- **AND** a task has resumeCount equal to 0
+- **AND** a task has isForked equal to true
+- **THEN** system appends "(forked)" after the task ID in the listing
+
+#### Scenario: No indicator for new tasks
+
+- **WHEN** user calls background_list
+- **AND** a task has resumeCount equal to 0 and isForked equal to false
 - **THEN** system shows task ID without any indicator
+
+### Requirement: Fork Context Inheritance
+
+The system SHALL support forking parent agent context to child background tasks via an optional `fork` parameter, enabling context-aware delegation without losing conversation history.
+
+#### Scenario: Launch forked background task
+
+- **WHEN** user calls background_task with `fork: true` and valid prompt/agent
+- **THEN** system calls OpenCode's session.fork API to create new session with inherited history
+- **AND** system processes forked context (truncates tool results, enforces token limit)
+- **AND** system injects preamble informing child about potential truncation
+- **AND** task is created with `isForked: true` flag
+- **AND** system returns task ID immediately (non-blocking)
+
+#### Scenario: Fork with context truncation
+
+- **WHEN** forked context contains tool results exceeding 1500 characters
+- **THEN** system truncates those results while preserving tool call structure (name, args, id)
+- **AND** truncated results include original length indicator
+
+#### Scenario: Fork with token limit enforcement
+
+- **WHEN** forked context total exceeds 100,000 tokens
+- **THEN** system removes oldest messages until context is under limit
+- **AND** most recent messages are preserved
+
+#### Scenario: Reject fork with resume
+
+- **WHEN** user calls background_task with both `fork: true` AND `resume: taskId`
+- **THEN** system returns error immediately
+- **AND** error message explains fork and resume are mutually exclusive
+
+#### Scenario: Fork indicator in task list
+
+- **WHEN** user calls background_list
+- **AND** a task has `isForked: true`
+- **THEN** system shows `(forked)` indicator after the task ID
+
+### Requirement: Fork Preamble Injection
+
+The system SHALL inject a system message into forked sessions to inform the child agent about context limitations.
+
+#### Scenario: Preamble content
+
+- **WHEN** fork mode creates a new session
+- **THEN** system injects system message via `session.prompt` with `noReply: true`
+- **AND** preamble explains context may be truncated
+- **AND** preamble advises re-reading files if complete content is needed
+
+### Requirement: Task List Parent Session Filtering
+
+The system SHALL filter task listings to only show tasks that are direct children of the current session, preventing clutter from unrelated tasks.
+
+#### Scenario: Filter by parent session
+
+- **WHEN** user calls background_list
+- **THEN** system only returns tasks where parentSessionID matches current session ID
+- **AND** tasks from other sessions are not displayed
+
+#### Scenario: Empty list for no children
+
+- **WHEN** user calls background_list
+- **AND** no tasks have current session as parent
+- **THEN** system returns "No background tasks found" message
 

@@ -18,6 +18,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - **Durable Tasks**: Tasks now survive plugin restarts and can be resumed indefinitely as long as the session exists in OpenCode.
 - **GitHub-style short IDs**: Task IDs now display in short format (e.g., `ses_41e08091` instead of full `ses_41e080918ffeyhQtX6E4vERe4O`). All tools accept both short and full IDs.
 - **Prefix matching for task IDs**: You can now use any unique prefix to reference a task (e.g., `ses_41e0` if it uniquely identifies a task).
+- **`fork` parameter for `background_task` tool to inherit parent conversation context**
+- **Context processing utilities for token counting and tool result truncation**
+- **`(forked)` indicator in task listings**
+- **Fork preamble injection for context-aware child agents**
 
 ### Changed
 - **`background_clear` behavior**: The `background_clear` tool now only clears the in-memory task cache. It no longer deletes task metadata from disk storage.

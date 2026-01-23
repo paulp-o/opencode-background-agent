@@ -23,19 +23,33 @@ Background tasks currently run with no knowledge of the parent agent's conversat
 
 ## Decisions
 
-### Decision 1: Use Native session.fork API
+### Decision 1: Context Injection via session.create (REVISED)
 
-**What**: Leverage OpenCode's built-in `POST /session/:id/fork` endpoint rather than custom context injection.
+**What**: Use `session.create` with `parentID` and inject parent context as a user message, rather than `session.fork` API.
 
-**Why**:
-- Server handles history copying automatically
-- Maintains proper message ordering and structure
-- Minimal code to maintain
-- Already tested and reliable in OpenCode
+**Why** (revised after testing):
+- `session.fork` creates a standalone session without UI parent-child relationship
+- Even with `session.update` to set `parentID`, forked sessions don't appear in OpenCode's subagent view or toast notifications
+- `session.create` with `parentID` properly establishes UI hierarchy
+- Context injection gives us full control over truncation and formatting
+
+**Implementation**:
+1. Create new session with `parentID` (ensures UI visibility)
+2. Fetch parent session messages via `session.messages`
+3. Process messages (truncate tool results >1500 chars, enforce 100k token limit)
+4. Format as `<inherited_context>...</inherited_context>` block
+5. Inject preamble + context as a single user message with `noReply: true`
+6. Send task prompt
+
+**Trade-offs**:
+- Pro: UI visibility works correctly (toast, subagent view)
+- Pro: Full control over context formatting and truncation
+- Con: Context is text-based, not native message history
+- Con: Slightly more code than `session.fork`
 
 **Alternatives considered**:
-- Custom context injection: More control but more code, must handle message ordering
-- Hybrid (fork + post-process): More complex, two-step process
+- Native session.fork API: Tested but doesn't maintain UI parent-child relationship
+- session.fork + session.update: Tested but forked sessions still appear standalone
 
 ### Decision 2: Smart Tool Result Truncation
 
@@ -117,7 +131,22 @@ If you need complete file contents or detailed results, re-read the files direct
 - Clear lineage tracking
 - Consistent with existing `(resumed)` indicator pattern
 
-## Data Flow
+### Decision 7: UI Parent-Child Relationship (Superseded by Decision 1 revision)
+
+**Status**: OBSOLETE - No longer using `session.fork` API.
+
+The context injection approach (revised Decision 1) uses `session.create` with `parentID` from the start, which properly establishes the UI parent-child relationship. No post-creation update needed.
+
+### Decision 8: Resume Status in Progress Toast
+
+**What**: Include tasks with `status === "resumed"` in the running tasks filter for toast notifications.
+
+**Why**:
+- Resumed tasks are actively running but were being excluded from the toast display
+- Users couldn't see resumed task progress in the OpenCode UI
+- "resumed" is semantically equivalent to "running" for UI purposes
+
+## Data Flow (Revised)
 
 ```
 background_task(fork: true, prompt: "Analyze X", agent: "explore")
@@ -130,24 +159,25 @@ background_task(fork: true, prompt: "Analyze X", agent: "explore")
     │
     ▼
 ┌─────────────────────────────────────┐
-│ 3. Call session.fork API            │
-│    POST /session/{parentID}/fork    │
-│    → Returns new forked session     │
+│ 3. Call session.create with parentID│
+│    → Returns new child session      │
+│    → UI hierarchy established       │
 └─────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────┐
-│ 4. Fetch messages from forked       │
+│ 4. Fetch messages from PARENT       │
 │ 5. Count tokens (anthropic tokenizer)
 │ 6. If >100k: remove oldest messages │
 │ 7. Truncate tool results >1500 chars│
+│ 8. Format as <inherited_context>    │
 └─────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────┐
-│ 8. Inject system preamble (noReply) │
-│ 9. Send task prompt (promptAsync)   │
-│ 10. Track task with isForked=true   │
+│ 9. Inject preamble+context (noReply)│
+│ 10. Send task prompt (promptAsync)  │
+│ 11. Track task with isForked=true   │
 └─────────────────────────────────────┘
 ```
 
@@ -157,9 +187,9 @@ background_task(fork: true, prompt: "Analyze X", agent: "explore")
 |------|--------|------------|
 | Token counting accuracy | Wrong cutoff point | Use official `@anthropic-ai/tokenizer` library |
 | Truncation loses critical info | Child misses important context | Preamble instructs to re-read files; preserve tool structure |
-| session.fork API changes | Breaking changes from OpenCode | Pin to tested OpenCode version; add error handling |
+| Text-based context vs native history | Child sees formatted text, not native messages | Clear formatting with `<inherited_context>` tags; sufficient for understanding |
 | Large conversations slow to process | Latency on fork | 100k limit caps processing; async operation |
-| New dependency (@anthropic-ai/tokenizer) | Bundle size increase | Small package (~50KB), essential for accuracy |
+| New dependency (@anthropic-ai/tokenizer) | Bundle size increase | ~1.1MB (WASM), essential for accuracy |
 
 ## Open Questions
 

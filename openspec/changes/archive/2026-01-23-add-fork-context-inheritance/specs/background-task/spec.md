@@ -50,6 +50,22 @@ The system SHALL inject a system message into forked sessions to inform the chil
 - **AND** preamble explains context may be truncated
 - **AND** preamble advises re-reading files if complete content is needed
 
+### Requirement: Task List Parent Session Filtering
+
+The system SHALL filter task listings to only show tasks that are direct children of the current session, preventing clutter from unrelated tasks.
+
+#### Scenario: Filter by parent session
+
+- **WHEN** user calls background_list
+- **THEN** system only returns tasks where parentSessionID matches current session ID
+- **AND** tasks from other sessions are not displayed
+
+#### Scenario: Empty list for no children
+
+- **WHEN** user calls background_list
+- **AND** no tasks have current session as parent
+- **THEN** system returns "No background tasks found" message
+
 ## MODIFIED Requirements
 
 ### Requirement: Background Task Creation
@@ -75,7 +91,7 @@ The system SHALL support launching background tasks that execute asynchronously 
 - **THEN** system returns error explaining these modes are mutually exclusive
 - **AND** no task is created
 
-### Requirement: Task List Resume and Fork Indicators
+### Requirement: Task List Resume Indicator
 
 The system SHALL indicate in task listings when a task has been resumed or forked, providing visual distinction for tasks with special context handling.
 

@@ -17,13 +17,17 @@ const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask
   startedAt: new Date().toISOString(),
   batchId: "batch_123",
   resumeCount: 0,
+  isForked: false,
   ...overrides,
 });
 
-// Mock manager that satisfies TaskManager interface for createBackgroundTask
 const createMockTaskManager = (launchMock = mock(() => Promise.resolve(createMockTask()))) => ({
   launch: launchMock,
   getTask: mock(() => undefined as BackgroundTask | undefined),
+  resolveTaskId: mock(() => null as string | null),
+  resolveTaskIdWithFallback: mock(() => Promise.resolve(null as string | null)),
+  getTaskWithFallback: mock(() => Promise.resolve(undefined as BackgroundTask | undefined)),
+  persistTask: mock(() => Promise.resolve()),
   checkSessionExists: mock(() => Promise.resolve(true)),
   sendResumePromptAsync: mock(() => Promise.resolve()),
 });

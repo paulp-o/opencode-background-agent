@@ -14,6 +14,7 @@ const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask
   startedAt: new Date().toISOString(),
   batchId: "batch_123",
   resumeCount: 0,
+  isForked: false,
   ...overrides,
 });
 
