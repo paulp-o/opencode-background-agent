@@ -1,5 +1,5 @@
 import { countTokens } from "@anthropic-ai/tokenizer";
-import { FORK_MAX_TOKENS, FORK_TOOL_RESULT_LIMIT } from "../constants";
+import { FORK_MAX_TOKENS, FORK_TOOL_PARAMS_LIMIT, FORK_TOOL_RESULT_LIMIT } from "../constants";
 
 // =============================================================================
 // Fork Context Processing Utilities
@@ -7,7 +7,17 @@ import { FORK_MAX_TOKENS, FORK_TOOL_RESULT_LIMIT } from "../constants";
 
 export interface SessionMessage {
   info?: { role?: string };
-  parts?: Array<{ type?: string; text?: string; name?: string; id?: string }>;
+  parts?: Array<{
+    type?: string;
+    text?: string;
+    // OpenCode ToolPart fields
+    tool?: string;
+    state?: { input?: Record<string, unknown> };
+    // Legacy fields (kept for compatibility)
+    name?: string;
+    id?: string;
+    input?: Record<string, unknown>;
+  }>;
 }
 
 export interface ProcessingStats {
@@ -133,17 +143,30 @@ export function formatMessagesAsContext(messages: SessionMessage[]): string {
   for (const msg of messages) {
     const role = msg.info?.role ?? "unknown";
     const roleLabel =
-      role === "user" ? "USER" : role === "assistant" ? "ASSISTANT" : role.toUpperCase();
+      role === "user"
+        ? "User"
+        : role === "assistant"
+          ? "Agent"
+          : role.charAt(0).toUpperCase() + role.slice(1);
 
-    lines.push(`\n[${roleLabel}]`);
+    lines.push(`\n${roleLabel}:`);
 
     if (msg.parts) {
       for (const part of msg.parts) {
         if (part.type === "text" && part.text) {
           lines.push(part.text);
-        } else if (part.type === "tool_use" && part.name) {
-          const toolCallText = `[Tool call: ${part.name}]`;
-          lines.push(toolCallText);
+        } else if (part.type === "tool" && part.tool) {
+          // OpenCode uses part.tool for name and part.state.input for params
+          let paramsPreview = "";
+          const input = part.state?.input;
+          if (input) {
+            const paramsStr = JSON.stringify(input);
+            paramsPreview =
+              paramsStr.length > FORK_TOOL_PARAMS_LIMIT
+                ? ` ${paramsStr.slice(0, FORK_TOOL_PARAMS_LIMIT)}...`
+                : ` ${paramsStr}`;
+          }
+          lines.push(`[Tool: ${part.tool}]${paramsPreview}`);
         } else if (part.type === "tool_result" && part.text) {
           // Include actual tool result content (already truncated by processMessage)
           lines.push(`[Tool result]\n${part.text}`);

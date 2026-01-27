@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Improved fork context display format**: Role labels changed from `[USER]`/`[ASSISTANT]` to `User:`/`Agent:` for better readability
+- **Tool call parameter preview**: Forked context now shows tool parameters (up to 200 chars) instead of just tool names
+
 ### Breaking Changes
 - **BREAKING** Renamed all tools from `background_*` to `superagents_*`:
   - `background_task` → `superagents_task`

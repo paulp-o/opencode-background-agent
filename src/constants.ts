@@ -51,3 +51,6 @@ export const FORK_MAX_TOKENS = 100000;
 
 /** Maximum characters per tool result before truncation */
 export const FORK_TOOL_RESULT_LIMIT = 1500;
+
+/** Maximum characters for tool parameters preview in forked context */
+export const FORK_TOOL_PARAMS_LIMIT = 200;
