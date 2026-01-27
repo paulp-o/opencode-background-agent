@@ -1,3 +1,12 @@
+> ⚠️ **Deprecated**
+>
+> This package has been moved.
+>
+> **Moved to:**
+> - GitHub: https://github.com/mainsoft-2024/better-opencode-async-agents  
+> - npm: https://www.npmjs.com/package/better-opencode-async-agents
+
+
 # OpenCode SuperAgents 
 
 [![npm version](https://img.shields.io/npm/v/@paulp-o/opencode-superagents)](https://www.npmjs.com/package/@paulp-o/opencode-superagents)
