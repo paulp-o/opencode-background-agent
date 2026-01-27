@@ -197,6 +197,19 @@ The system SHALL support forking parent agent context to child background tasks 
 - **AND** a task has `isForked: true`
 - **THEN** system shows `(forked)` indicator after the task ID
 
+#### Scenario: Fork context role label format
+
+- **WHEN** forked context is formatted for child agent
+- **THEN** user messages are labeled with `User:` prefix
+- **AND** assistant messages are labeled with `Agent:` prefix
+
+#### Scenario: Fork context tool call display
+
+- **WHEN** forked context contains tool_use parts
+- **THEN** system displays tool calls with name and parameter preview
+- **AND** parameter preview is truncated to 200 characters with ellipsis if exceeded
+- **AND** format is `[Tool: {name}] {params_preview}`
+
 ### Requirement: Fork Preamble Injection
 
 The system SHALL inject a system message into forked sessions to inform the child agent about context limitations.
